@@ -36,13 +36,12 @@ type gothAuthenticator struct {
 // InitGoth sets up Goth session store and registers the Google provider.
 func InitGoth(sessionSecret string, googleCfg config.GoogleOAuthConfig) OAuthAuthenticator {
 	// Initialize cookie store for OAuth state management
-	maxAge := 86400 * 30 // 30 days
 	store := sessions.NewCookieStore([]byte(sessionSecret))
-	store.MaxAge(maxAge)
 	store.Options = &sessions.Options{
 		Path:     "/",
+		MaxAge:   86400 * 30,
 		HttpOnly: true,
-		Secure:   false, // set to true in HTTPS production
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	}
 	gothic.Store = store
