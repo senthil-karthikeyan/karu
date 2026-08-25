@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,17 +23,34 @@ func NewUserHandler(userService service.UserService) *UserHandler {
 
 // GetMe returns current authenticated user's profile.
 func (h *UserHandler) GetMe(c *gin.Context) {
+	log.Printf("[USERS ME] request received")
+
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
+		log.Printf("[USERS ME] GetUserID error: %v", err)
+
 		model.SendError(c, model.ErrUnauthorized)
 		return
 	}
 
-	profile, err := h.userService.GetProfile(c.Request.Context(), userID)
+	log.Printf("[USERS ME] user_id=%s", userID)
+
+	profile, err := h.userService.GetProfile(
+		c.Request.Context(),
+		userID,
+	)
 	if err != nil {
+		log.Printf(
+			"[USERS ME] GetProfile error user_id=%s err=%v",
+			userID,
+			err,
+		)
+
 		model.SendError(c, err)
 		return
 	}
+
+	log.Printf("[USERS ME] success user_id=%s", userID)
 
 	model.SendSuccess(c, http.StatusOK, profile)
 }
