@@ -1,6 +1,6 @@
 # Karu Frontend
 
-The frontend client for **Karu**, an immersive screenplay writing studio and film development workspace. Built with **Next.js 16 (App Router & Turbopack)**, **React 19**, **TypeScript**, **Tailwind CSS v4**, **shadcn/ui**, and **TipTap**.
+The frontend client for **Karu**, an immersive screenplay writing studio and film development workspace. Built with **Next.js 16 (App Router & Turbopack)**, **React 19**, **TypeScript**, **Tailwind CSS v4**, **shadcn/ui**, **TipTap**, and **Zero-Knowledge Web Crypto API (E2EE)**.
 
 ---
 
@@ -9,12 +9,14 @@ The frontend client for **Karu**, an immersive screenplay writing studio and fil
 * **Framework**: [Next.js 16.3.1](https://nextjs.org/) (App Router, Turbopack, Server & Client Components)
 * **Library**: [React 19.2.8](https://react.dev/)
 * **Language**: [TypeScript 5.9](https://www.typescriptlang.org/)
+* **Cryptography (E2EE)**: [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) (`SubtleCrypto`, AES-256-GCM, PBKDF2-SHA256, ECDH P-256)
 * **Styling**: [Tailwind CSS v4.3.3](https://tailwindcss.com/) with PostCSS
 * **UI Components**: [shadcn/ui](https://ui.shadcn.com/) / [@base-ui/react](https://base-ui.com/)
 * **Screenplay Editor**: [TipTap 3.30](https://tiptap.dev/) with ProseMirror (`@tiptap/pm`)
 * **Server State & Cache**: [@tanstack/react-query 5.101](https://tanstack.com/query)
-* **Client State Management**: [Zustand 5.0](https://zustand-demo.pmnd.rs/)
+* **Client State Management**: [Zustand 5.0](https://zustand-demo.pmnd.rs/) (Non-persistent in-memory cryptographic key store)
 * **Form Validation**: [React Hook Form 7.85](https://react-hook-form.com/) + [Zod 4.4](https://zod.dev/)
+* **Browser Automation & Testing**: [Playwright](https://playwright.dev/) + [tsx](https://github.com/privatenumber/tsx)
 * **Icons**: [Lucide React 1.31](https://lucide.dev/)
 * **Notifications**: [Sonner 2.0](https://sonner.emilkowal.ski/)
 * **Date Utilities**: [date-fns 4.4](https://date-fns.org/)
@@ -24,7 +26,7 @@ The frontend client for **Karu**, an immersive screenplay writing studio and fil
 
 ## 🏗 Architecture
 
-The frontend follows Next.js App Router patterns, utilizing Server Components for high-performance static rendering and Client Components (`"use client"`) for rich interactive workspaces and stateful forms.
+The frontend follows Next.js App Router patterns, utilizing Server Components for high-performance static rendering and Client Components (`"use client"`) for rich interactive workspaces, TipTap editing, and client-side encryption.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -42,9 +44,16 @@ The frontend follows Next.js App Router patterns, utilizing Server Components fo
                                                │
                                                ▼
                                 ┌─────────────────────────────┐
+                                │      E2EE Crypto Engine     │
+                                │   Web Crypto (SubtleCrypto) │
+                                │  UEK • PEK • SCK • ECDH P256 │
+                                └──────────────┬──────────────┘
+                                               │
+                                               ▼
+                                ┌─────────────────────────────┐
                                 │       State & Data Layer    │
                                 │ TanStack Query (Server)     │
-                                │ Zustand Stores (Client)     │
+                                │ Zustand Stores (In-Memory)  │
                                 └──────────────┬──────────────┘
                                                │
                                                ▼
@@ -62,6 +71,9 @@ The frontend follows Next.js App Router patterns, utilizing Server Components fo
 ```text
 frontend/
 ├── public/                    # Static image assets and icons
+├── scripts/
+│   ├── e2e-browser-test.mjs   # Full 21-test Playwright browser automation suite
+│   └── run-crypto-tests.mjs   # 12-test Web Crypto unit test runner
 ├── src/
 │   ├── app/                   # Next.js App Router pages
 │   │   ├── (auth)/            # Authentication group routes
@@ -71,20 +83,26 @@ frontend/
 │   │   ├── dashboard/         # /dashboard (Project listing & search)
 │   │   ├── projects/[id]/     # Project workspace routes
 │   │   │   ├── editor/        # /projects/[id]/editor (TipTap editor)
-│   │   │   ├── preview/       # /projects/[id]/preview (Reading view)
+│   │   │   ├── preview/       # /projects/[id]/preview (Reading & print view)
 │   │   │   └── page.tsx       # /projects/[id] (Overview, Activity, Settings)
-│   │   ├── settings/          # /settings (User profile & preferences)
+│   │   ├── settings/          # /settings (Profile, Security, Migration tab)
 │   │   ├── globals.css        # Global CSS & screenplay styling tokens
 │   │   ├── layout.tsx         # Root layout with providers & fonts
 │   │   └── page.tsx           # Public landing page
 │   ├── components/            # Component design system
+│   │   ├── crypto/            # E2EE components
+│   │   │   ├── encryption-badge.tsx           # Visual lock/unlocked tooltip badge
+│   │   │   ├── encryption-banner.tsx          # Setup prompt banners
+│   │   │   ├── encryption-dialog.tsx          # Passphrase unlock/setup modal
+│   │   │   ├── encryption-onboarding-modal.tsx # First-time setup wizard
+│   │   │   └── legacy-migration-card.tsx      # In-place batch encryption migration
 │   │   ├── dashboard/         # Project cards, metrics, filters
 │   │   ├── editor/            # Screenplay editor, toolbar, scene nav, export
 │   │   ├── landing/           # Hero, feature showcase, footer
-│   │   ├── modals/            # Create project modal
+│   │   ├── modals/            # Create project modal with automatic PEK wrapping
 │   │   ├── navigation/        # Main navigation header & workspace sidebar
 │   │   ├── preview/           # Multi-page preview canvas & pagination strip
-│   │   ├── ui/                # shadcn / Base UI primitives
+│   │   ├── ui/                # Base UI / shadcn design system primitives
 │   │   └── workspace/         # Overview, activity log & project settings
 │   ├── hooks/                 # React Query & auth hooks
 │   │   ├── use-auth.ts        # Session verification and guard hook
@@ -93,11 +111,20 @@ frontend/
 │   ├── lib/                   # Utility libraries & API client
 │   │   ├── api/               # Typed API client modules
 │   │   │   ├── client.ts      # Core fetch wrapper with 401 token refresh queue
-│   │   │   ├── auth.ts        # Authentication endpoints
-│   │   │   ├── projects.ts    # Project CRUD endpoints
-│   │   │   ├── screenplays.ts # Screenplay content, revisions & versions
+│   │   │   ├── auth.ts        # Authentication & encryption identity endpoints
+│   │   │   ├── projects.ts    # Project CRUD & project key endpoints
+│   │   │   ├── screenplays.ts # Screenplay content, revisions, versions & keys
 │   │   │   ├── scenes.ts      # Scene management endpoints
 │   │   │   └── activities.ts  # Activity history endpoints
+│   │   ├── crypto/            # Client-Side Cryptographic Engine (E2EE)
+│   │   │   ├── aes-gcm.ts     # AES-256-GCM encryption & decryption
+│   │   │   ├── crypto-types.ts # TypeScript interfaces for keys & payloads
+│   │   │   ├── encoding.ts    # Lossless UTF-8 & Base64 conversions
+│   │   │   ├── index.ts       # Barrel export
+│   │   │   ├── key-derivation.ts # PBKDF2-SHA256 (600,000 rounds)
+│   │   │   ├── key-manager.ts # 3-tier key wrapping & ECDH P-256 identity
+│   │   │   ├── recovery.ts    # Emergency recovery key generator & kit
+│   │   │   └── screenplay-encryption.ts # TipTap JSON AST encryption & parsing
 │   │   ├── date.ts            # Relative time formatting
 │   │   ├── export-utils.ts    # PDF, Fountain & Plain Text converters
 │   │   ├── initial-data.ts    # Default screenplay seed template
@@ -106,60 +133,50 @@ frontend/
 │   ├── providers/             # React Query & Theme providers
 │   ├── stores/                # Zustand client state stores
 │   │   ├── auth-store.ts      # Authentication session state
+│   │   ├── encryption-store.ts # In-memory 3-tier cryptographic key state
 │   │   ├── project-store.ts   # Project activity and local project state
 │   │   ├── app-store.ts       # Global UI toggles
 │   │   └── user-store.ts      # Local profile state
 │   └── types/                 # TypeScript interfaces and domain types
 │       └── screenplay.ts      # Screenplay, Scene, Project & Export types
-├── components.json            # shadcn/ui configuration
-├── eslint.config.mjs          # ESLint 9 configuration
-├── next.config.ts             # Next.js configuration
 ├── package.json               # Package dependencies & scripts
-├── pnpm-lock.yaml             # pnpm dependency lockfile
-├── postcss.config.mjs         # PostCSS configuration for Tailwind v4
 └── tsconfig.json              # TypeScript compiler configuration
 ```
 
 ---
 
-## 🗺 Application Routes
+## 🔐 Zero-Knowledge Cryptographic Engine (`src/lib/crypto`)
 
-| Route | Access | Purpose |
-| :--- | :--- | :--- |
-| `/` | Public | Cinematic landing page showcasing product features, hero, and CTA. |
-| `/login` | Public (Guest) | Sign-in form (email/password & Google OAuth). Redirects to `/dashboard` if authenticated. |
-| `/signup` | Public (Guest) | Account registration form with terms consent and Google OAuth. Redirects to `/dashboard` if authenticated. |
-| `/auth/callback` | Public | Receives OAuth redirect tokens (`?token=...&refresh_token=...`), initializes session, and routes to `/dashboard`. |
-| `/dashboard` | **Protected** | Personal film studio dashboard with project cards, search, status tabs, and creation modal. |
-| `/projects/:id` | **Protected** | Project workspace hub containing Overview, Scene breakdown, Activity history, and Project Settings. |
-| `/projects/:id/editor` | **Protected** | Fullscreen screenplay editor with TipTap, real-time pagination, scene navigator, and export tools. |
-| `/projects/:id/preview` | **Protected** | Dedicated screenplay reading and print preview mode with page-level navigation and zoom controls. |
-| `/settings` | **Protected** | User profile settings, editor preferences (autoSave, spellCheck, wordWrap), and password updates. |
+### 1. 3-Tier Key Hierarchy
 
----
+Karu implements a 3-tier key architecture ensuring document keys and project scopes are decoupled:
 
-## 🎨 UI Architecture & Design System
+1. **Tier 1 — User Encryption Key (`UEK`)**:
+   - Derived client-side via `PBKDF2-SHA256` using the user's secret passphrase, 32-byte CSPRNG salt, and **600,000 iterations**.
+   - Held strictly in non-persistent JavaScript memory (Zustand). Never stored in `localStorage`, `sessionStorage`, or cookies.
+2. **Tier 2 — User Identity (`ECDH P-256`) & Project Encryption Key (`PEK`)**:
+   - `User Identity`: ECDH P-256 keypair. Public key is uploaded in SPKI format; private key is wrapped with `UEK` via AES-256-GCM before saving to backend.
+   - `PEK`: Unique 256-bit AES-GCM key per project, wrapped with `UEK` and stored in the database.
+3. **Tier 3 — Screenplay Content Key (`SCK`) & Document Encryption**:
+   - `SCK`: Unique 256-bit AES-GCM key generated per screenplay and wrapped with the project's `PEK`.
+   - `Document Payload`: Serialized TipTap JSON encrypted with `SCK` using a fresh 12-byte random IV.
 
-* **Tailwind CSS v4**: Utilizes CSS variables and theme tokens for dark/light mode consistency.
-* **Screenplay Paper Canvas**: Custom CSS classes (`screenplay-paper`, `dark:screenplay-paper-dark`) emulate physical 8.5" × 11" screenplay parchment.
-* **Typography**: Industry-standard **Courier Prime 12pt** styling with accurate letter-spacing, line-height, and element indentation:
-  * **Scene Heading**: Uppercase bold with top/bottom margin spacing.
-  * **Action**: Full page margin width (60-70 characters per line).
-  * **Character**: Centered uppercase (indent ~3.7").
-  * **Dialogue**: Centered text block (width ~3.5", indent ~2.5").
-  * **Parenthetical**: Dialogue annotation (indent ~3.1").
-  * **Transition**: Right-aligned uppercase (e.g., `FADE OUT:`).
+### 2. Emergency Recovery Kit (`src/lib/crypto/recovery.ts`)
 
----
+- Generates 128-bit entropy Base32 checksummed keys formatted as `KARU-XXXX-XXXX-XXXX-...`.
+- Provides an automated one-click downloadable text file (`KARU-Emergency-Recovery-Kit.txt`) with safety warnings and recovery instructions.
 
-## ⚡ State Management
+### 3. Screenplay Encryption & Autosave (`src/lib/crypto/screenplay-encryption.ts`)
 
-1. **Server State (TanStack Query v5)**:
-   * Automatic caching, background revalidation, and optimistic mutations for projects, screenplays, scenes, and user profiles.
-   * Query keys structured hierarchically (`["projects"]`, `["projects", id]`, `["screenplays", id]`, etc.).
-2. **Client State (Zustand v5)**:
-   * `auth-store`: Tracks user profile, authentication state, login/register/logout actions, and token initialization.
-   * `project-store`: Manages active project context, client activity timeline, and local overrides.
+- Parses TipTap ProseMirror document AST into JSON.
+- Encrypts AST via AES-256-GCM.
+- Returns `{ version: 1, algorithm: "AES-GCM", iv: "...", ciphertext: "..." }`.
+- Plaintext screenplay content never touches network transmission or persistent disk.
+
+### 4. Legacy Plaintext Migration (`src/components/crypto/legacy-migration-card.tsx`)
+
+- Automatically detects unencrypted legacy workspaces in user accounts.
+- In-place batch migration converts HTML/plain text into TipTap AST, generates `PEK`/`SCK` wrappers, encrypts documents client-side, and updates backend records seamlessly.
 
 ---
 
@@ -183,38 +200,9 @@ The writing studio in `components/editor/screenplay-editor.tsx` is powered by Ti
 
 ### 3. Real-Time Physical Page Pagination
 * Implemented via a custom **ProseMirror Plugin** (`ScreenplayPagination`).
-* Calculates block heights in real-time based on DOM offset measurements and character counts (using an 840px usable page height threshold).
+* Calculates block heights in real-time based on DOM offset measurements and character counts (840px usable page height threshold).
 * Injects non-editable ProseMirror widget decorations (`screenplay-page-break-widget`) at page boundary positions.
 * Displays header page numbers (e.g., `Page 2.`) and bottom page breaks without splitting the single underlying editable document.
-
-### 4. Dynamic Scene Extraction
-* Automatically extracts sluglines from `<h2>` elements in the screenplay HTML.
-* Powers the collapsible **Scene Navigator** sidebar, enabling instant jump-to-scene selection.
-
----
-
-## 🔒 Authentication & Route Protection
-
-### 1. Edge Middleware (`src/middleware.ts`)
-* Intercepts incoming requests before rendering.
-* Checks for the presence of the `karu_access_token` cookie.
-* **Unauthenticated users** accessing protected prefixes (`/dashboard`, `/projects`, `/settings`, `/workspace`) are redirected to `/login`.
-* **Authenticated users** accessing `/login` or `/signup` are redirected to `/dashboard`.
-
-### 2. API Client with Silent Token Refresh (`src/lib/api/client.ts`)
-* Automatically injects `Authorization: Bearer <token>` into API requests.
-* Intercepts `401 Unauthorized` responses and queues pending requests.
-* Calls `POST /api/v1/auth/refresh` using the stored refresh token.
-* On successful token rotation, updates local storage and cookies, then retries all queued requests.
-* If refresh fails, tokens are cleared and the user is redirected to `/login`.
-
----
-
-## 📤 Export Engine (`src/lib/export-utils.ts`)
-
-* **PDF Export**: Triggers the browser's high-fidelity print engine configured with screenplay print CSS stylesheets.
-* **Fountain Export**: Converts screenplay HTML nodes into plain `.fountain` text format adhering to the standard Fountain screenwriting syntax.
-* **Plain Text Export**: Generates industry-standard indented plain text screenplay documents (`.txt`).
 
 ---
 
@@ -247,30 +235,29 @@ The application will be running at [http://localhost:3000](http://localhost:3000
 
 ---
 
-## 🧪 Verification & Build
+## 🧪 Verification & Testing
 
-### Type Check
+### 1. Run Cryptographic Unit Tests (12 Suites)
+
+```bash
+pnpm test:crypto
+```
+
+### 2. Run Automated Playwright Browser E2E Tests (21 Tests)
+
+```bash
+node scripts/e2e-browser-test.mjs
+```
+
+### 3. Type Check & Lint
 
 ```bash
 pnpm exec tsc --noEmit
-```
-
-### Run ESLint
-
-```bash
 pnpm lint
 ```
 
-### Production Build
+### 4. Production Build
 
 ```bash
 pnpm build
 ```
-
----
-
-## ⚠️ Current Limitations
-
-* **Single-User Workflow**: Project collaboration and multi-user live editing are not currently supported in the frontend UI.
-* **Client-Side Encryption**: Screenplay content is transmitted in plaintext to the Go API (E2EE is not implemented).
-* **PDF Rendering**: PDF export currently relies on the browser's `window.print()` dialog rather than a server-side PDF compilation service.

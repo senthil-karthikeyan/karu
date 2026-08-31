@@ -1,33 +1,35 @@
 # Karu
 
-**Karu** is a modern, distraction-free film workspace and screenplay writing studio built for screenwriters, directors, and independent filmmakers. It combines industry-standard screenplay formatting with an 8.5" × 11" physical page canvas, real-time autosave with optimistic concurrency control, immutable version checkpointing, and project management tools.
+**Karu** is a modern, distraction-free film workspace and screenplay writing studio built for screenwriters, directors, and independent filmmakers. It combines industry-standard screenplay formatting with an 8.5" × 11" physical page canvas, real-time autosave with optimistic concurrency control, immutable version checkpointing, and **Zero-Knowledge 3-Tier End-to-End Encryption (E2EE)**.
 
 ---
 
 ## What Karu Is
 
-Karu is designed to streamline the single-user screenwriting workflow from initial concept to production draft. Traditional screenwriting software is often cluttered, legacy-bound, or tied to proprietary desktop formats. Karu bridges this gap by delivering:
+Karu is designed to streamline the filmmaking and screenwriting workflow from initial concept to production draft with military-grade privacy. Traditional screenwriting software is often cluttered, legacy-bound, or tied to proprietary desktop formats with unencrypted cloud storage. Karu delivers:
 
-* **Cinematic Project Workspace**: Manage film projects with metadata including title, loglines, genre, format, and synopsis.
-* **Physical Page Pagination**: Write on an industry-standard 8.5" × 11" screenplay canvas with real-time block-height pagination that flows text across page boundaries and displays header page numbers.
-* **Screenplay Typography & Shortcuts**: Full Courier Prime 12pt typography with context-aware Tab and Enter keyboard shortcuts cycling through scene headings, action, character, dialogue, parentheticals, and transitions.
+* **Zero-Knowledge End-to-End Encryption (E2EE)**: Client-side AES-256-GCM encryption ensures screenplay drafts, character bios, dialogue, and revision history are encrypted before leaving your browser. The database and backend hold zero knowledge of your creative work.
+* **3-Tier Cryptographic Key Hierarchy**: Master User Encryption Key (`UEK`) $\rightarrow$ Scoped Project Encryption Key (`PEK`) $\rightarrow$ Document Screenplay Content Key (`SCK`) with ECDH P-256 asymmetric identity for secure offline key distribution.
+* **Emergency Recovery Kit**: Base32 checksummed emergency recovery keys (`KARU-XXXX-XXXX-...`) with downloadable recovery kits preventing data lock-out.
+* **Cinematic Project Workspace**: Manage film projects with rich metadata including title, loglines, genre, format, and synopsis.
+* **Physical Page Pagination**: Write on an industry-standard 8.5" × 11" screenplay canvas with real-time block-height pagination that flows text across page boundaries with header page numbering.
+* **Screenplay Typography & Shortcuts**: Full Courier Prime 12pt typography with context-aware `Tab` and `Enter` keyboard shortcuts cycling through scene headings, action, character, dialogue, parentheticals, and transitions.
 * **Robust Autosave with Optimistic Concurrency**: Debounced client autosave paired with database revision tracking that detects stale updates and prevents overwrite conflicts.
-* **Version Checkpoints & Restore**: Snapshot named milestone drafts and transactionally restore historical versions with automatic restore points.
+* **Version Checkpoints & Zero-Knowledge Restore**: Snapshot named milestone drafts and transactionally restore historical versions without server-side plaintext exposure.
 * **Screenplay Reader & Exporter**: Dedicated reading mode with zooming, printing, and multi-format export to PDF (print-ready), Fountain (`.fountain`), and Plain Text (`.txt`).
 * **Multi-Provider Authentication**: Secure email/password authentication (bcrypt) and Google OAuth (via Goth) backed by rotating refresh token sessions.
+* **Legacy Plaintext Migration**: One-click in-place batch migration to convert unencrypted legacy projects into the 3-tier E2EE scheme.
 
 ---
 
 ## Current Status
 
-Karu is currently implemented and operational as a **single-user filmmaking workspace**. 
+Karu is fully implemented, hardened, and operational:
 
-* The **Frontend** is built with **Next.js 16 (Turbopack)**, **React 19**, **Tailwind CSS v4**, **shadcn/ui**, and **TipTap**.
-* The **Backend** is a high-performance REST API built in **Go 1.24+** using **Gin**, **pgx/v5**, **sqlc**, **golang-migrate**, and **golang-jwt/v5**.
-* The **Database** is **PostgreSQL 16** managed through versioned SQL migrations.
-
-> [!NOTE]
-> The current codebase is optimized for individual filmmakers and screenwriters. Multi-user collaboration, real-time co-authoring, and client-side end-to-end encryption (E2EE) are currently **planned future architecture** and are **not implemented** in the current release.
+* **Frontend**: Built with **Next.js 16 (Turbopack)**, **React 19**, **Tailwind CSS v4**, **shadcn/ui**, **TipTap (ProseMirror)**, and **Web Crypto API (SubtleCrypto)**.
+* **Backend**: High-performance REST API built in **Go 1.24+** using **Gin**, **pgx/v5**, **sqlc**, **golang-migrate**, **golang-jwt/v5**, and security middleware.
+* **Database**: **PostgreSQL 16** managed through versioned SQL migrations (`000001` through `000006`).
+* **Security & E2EE**: 100% Zero-Knowledge 3-tier key hierarchy verified via 12 cryptographic unit tests and 21 automated Playwright browser tests.
 
 ---
 
@@ -36,33 +38,68 @@ Karu is currently implemented and operational as a **single-user filmmaking work
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │                      Next.js 16 Client                      │
-│   React 19 • TipTap • TanStack Query • Zustand • Tailwind   │
+│   React 19 • TipTap • Web Crypto API • TanStack Query       │
+│    Zustand (In-Memory Crypto Keys) • Tailwind CSS v4        │
 └──────────────────────────────┬──────────────────────────────┘
                                │
-                        HTTPS / JSON API
+               Encrypted Payloads (AES-256-GCM)
+               HTTPS / JSON API • Bearer JWT
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                       Go API (Gin)                          │
-│  Router • Middleware (JWT/CORS) • Services • Repositories   │
-│            Goth (Google OAuth) • Token Manager              │
+│   Router • Security Headers • Auth & Refresh Token Rotation │
+│       Services • Repositories • Goth (Google OAuth)         │
+│          Zero-Knowledge Backend (Opaque Ciphertext)         │
 └──────────────────────────────┬──────────────────────────────┘
                                │
-                            pgxpool
+                             pgxpool
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                    PostgreSQL 16 Engine                     │
 │    Users • Auth Identities • Refresh Tokens • Projects      │
-│     Scenes • Screenplays • Contents • Versions • Activities  │
+│    Project Keys • User Encryption Identities • Scenes       │
+│    Screenplays • Screenplay Keys • Contents • Versions      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Core Subsystems
+---
 
-1. **Client Tier (`/frontend`)**: Handles user interface rendering, client-side route protection via Next.js middleware, TipTap rich text editing, DOM/ProseMirror pagination calculations, and server cache synchronization via TanStack Query.
-2. **API Tier (`/backend`)**: Enforces authentication, session token rotation, request validation, business logic, optimistic concurrency checks, and multi-tenant data isolation.
-3. **Data Tier (PostgreSQL)**: Persists normalized domain models using generated type-safe sqlc queries within strict ACID transactions.
+## Cryptographic Key Hierarchy
+
+```text
+               +----------------------------------+
+               |        Master Passphrase         |
+               +----------------------------------+
+                                |
+                                | PBKDF2-SHA256 (600,000 iterations)
+                                v
+               +----------------------------------+
+               |   User Encryption Key (UEK)      |  (Tier 1: Master Key in Memory)
+               +----------------------------------+
+                     /                      \
+      AES-256-GCM   /                        \  AES-256-GCM
+                   v                          v
+    +---------------------------+     +-----------------------------+
+    | User Identity Keypair     |     | Project Encryption Key (PEK)|  (Tier 2: Scoped Key)
+    | (ECDH P-256 Private Key)  |     | (Random AES-256-GCM Key)    |
+    +---------------------------+     +-----------------------------+
+                                                     |
+                                                     | AES-256-GCM
+                                                     v
+                                      +-----------------------------+
+                                      | Screenplay Content Key (SCK)|  (Tier 3: Document Key)
+                                      | (Random AES-256-GCM Key)    |
+                                      +-----------------------------+
+                                                     |
+                                                     | AES-256-GCM (Fresh 12-byte IV)
+                                                     v
+                                      +-----------------------------+
+                                      | Serialized TipTap JSON      |
+                                      | (Ciphertext + 128-bit Tag)  |
+                                      +-----------------------------+
+```
 
 ---
 
@@ -71,72 +108,90 @@ Karu is currently implemented and operational as a **single-user filmmaking work
 ```text
 karu/
 ├── README.md                          # Main project documentation (this file)
+├── docs/
+│   └── SECURITY_ARCHITECTURE.md       # Cryptographic specification & threat model
 ├── backend/                           # Go REST API backend service
 │   ├── cmd/
-│   │   ├── api/main.go                # API entry point & lifecycle bootstrapping
+│   │   ├── api/main.go                # API entry point & service bootstrap
 │   │   └── server/main.go             # Alternate server bootstrap
 │   ├── db/
 │   │   ├── migrations/                # Versioned SQL migrations (golang-migrate)
 │   │   │   ├── 000001_initial_schema.up.sql
-│   │   │   ├── 000001_initial_schema.down.sql
 │   │   │   ├── 000002_auth_identities_and_screenplays.up.sql
-│   │   │   └── 000002_auth_identities_and_screenplays.down.sql
+│   │   │   ├── 000003_e2ee_support.up.sql
+│   │   │   ├── 000004_e2ee_support.up.sql
+│   │   │   ├── 000005_user_encryption_identities.up.sql
+│   │   │   └── 000006_project_keys.up.sql
 │   │   └── queries/                   # sqlc source SQL queries
+│   │       ├── activities.sql
+│   │       ├── auth_identities.sql
+│   │       ├── project_keys.sql
+│   │       ├── projects.sql
+│   │       ├── refresh_tokens.sql
+│   │       ├── scenes.sql
+│   │       ├── screenplay_contents.sql
+│   │       ├── screenplay_versions.sql
+│   │       ├── screenplays.sql
+│   │       ├── user_encryption_identities.sql
+│   │       └── users.sql
 │   ├── internal/
 │   │   ├── auth/                      # Password hashing (bcrypt), JWT, and Goth OAuth
 │   │   ├── config/                    # Environment variable configuration loader
 │   │   ├── database/                  # pgxpool lifecycle & migration runner
 │   │   ├── handler/                   # Gin HTTP request handlers & input validation
-│   │   ├── middleware/                # JWT auth, CORS, logging, recovery, request ID
-│   │   ├── model/                     # Domain DTOs, API envelopes, and error codes
+│   │   ├── middleware/                # Security headers, JWT, CORS, logging, recovery
+│   │   ├── model/                     # Domain DTOs, encryption payloads, error codes
 │   │   ├── repository/                # Data access layer wrapping sqlc queries
 │   │   ├── router/                    # Route definition and dependency injection
 │   │   ├── server/                    # HTTP server configuration
-│   │   └── service/                   # Core business logic (Auth, Projects, Screenplays)
+│   │   └── service/                   # Core business logic (Auth, Projects, Screenplays, Keys)
 │   ├── sqlc/
 │   │   └── generated/                 # Type-safe Go code generated by sqlc
-│   ├── .air.toml                      # Hot-reload configuration for Air
-│   ├── .env.example                   # Backend environment template
-│   ├── docker-compose.yml             # Local PostgreSQL container service
 │   ├── Dockerfile                     # Multi-stage production container build
+│   ├── docker-compose.yml             # Local PostgreSQL container service
 │   ├── Makefile                       # Developer task runner
 │   ├── go.mod                         # Go module definitions
 │   └── sqlc.yaml                      # sqlc compiler configuration
 └── frontend/                          # Next.js 16 frontend application
     ├── public/                        # Static assets and icons
+    ├── scripts/
+    │   ├── e2e-browser-test.mjs       # Automated 21-step Playwright browser test
+    │   └── run-crypto-tests.mjs       # 12-suite cryptographic unit test runner
     ├── src/
     │   ├── app/                       # Next.js App Router pages and layouts
-    │   │   ├── (auth)/
-    │   │   │   ├── login/page.tsx     # Sign-in page
-    │   │   │   └── signup/page.tsx    # Registration page
-    │   │   ├── auth/callback/page.tsx # Google OAuth token callback handler
+    │   │   ├── (auth)/login/page.tsx  # Sign-in page
+    │   │   ├── (auth)/signup/page.tsx # Registration page
+    │   │   ├── auth/callback/page.tsx # OAuth token callback handler
     │   │   ├── dashboard/page.tsx     # Film project dashboard
-    │   │   ├── projects/[id]/
-    │   │   │   ├── page.tsx           # Project overview, activity & settings workspace
+    │   │   ├── projects/[id]/         # Project workspace hub
     │   │   │   ├── editor/page.tsx    # Screenplay writing studio
     │   │   │   └── preview/page.tsx   # Screenplay reader / print view
-    │   │   ├── settings/page.tsx      # User profile & writing preferences
-    │   │   ├── globals.css            # Global CSS, Tailwind tokens & paper styling
-    │   │   ├── layout.tsx             # Root layout and font configurations
-    │   │   └── page.tsx               # Cinematic public landing page
+    │   │   ├── settings/page.tsx      # User profile, security & migration tab
+    │   │   └── globals.css            # Global CSS, Tailwind tokens & paper styling
     │   ├── components/                # Reusable UI and domain components
+    │   │   ├── crypto/                # E2EE badges, banners, unlock dialog, migration card
     │   │   ├── dashboard/             # Project cards and stats
     │   │   ├── editor/                # TipTap editor, toolbar, scene nav & export modal
     │   │   ├── landing/               # Hero, showcase & footer sections
-    │   │   ├── modals/                # Create project dialog
+    │   │   ├── modals/                # Create project dialog with auto-PEK generation
     │   │   ├── navigation/            # Main navigation header & workspace sidebar
-    │   │   ├── preview/               # Screenplay preview canvas & page switcher
-    │   │   ├── ui/                    # Base UI / shadcn design system primitives
-    │   │   └── workspace/             # Overview, activity timeline & project settings
+    │   │   ├── preview/               # Screenplay preview canvas & decryption
+    │   │   └── ui/                    # Base UI / shadcn design system primitives
     │   ├── hooks/                     # Custom React Query & auth hooks
-    │   ├── lib/                       # API client, date helpers, export utilities
+    │   ├── lib/
+    │   │   ├── api/                   # Typed API client modules
+    │   │   ├── crypto/                # Web Crypto API E2EE engine
+    │   │   │   ├── aes-gcm.ts         # AES-256-GCM encrypt/decrypt primitives
+    │   │   │   ├── crypto-types.ts    # Key & payload interfaces
+    │   │   │   ├── encoding.ts        # UTF-8 & Base64 chunked converters
+    │   │   │   ├── key-derivation.ts  # PBKDF2-SHA256 (600,000 iterations)
+    │   │   │   ├── key-manager.ts     # 3-tier key wrapping & ECDH P-256 identity
+    │   │   │   ├── recovery.ts        # Emergency recovery key kit generator
+    │   │   │   └── screenplay-encryption.ts # TipTap JSON AST encryption
+    │   │   └── export-utils.ts        # PDF, Fountain & Plain Text converters
     │   ├── middleware.ts              # Route protection & cookie redirection guard
-    │   ├── providers/                 # React Query & Theme providers
-    │   ├── stores/                    # Zustand client stores (auth, projects)
+    │   ├── stores/                    # Zustand client stores (auth, encryption)
     │   └── types/                     # TypeScript domain models and interfaces
-    ├── components.json                # shadcn/ui configuration
-    ├── eslint.config.mjs              # ESLint configuration
-    ├── next.config.ts                 # Next.js configuration
     ├── package.json                   # Frontend dependencies and scripts
     └── tsconfig.json                  # TypeScript compiler configuration
 ```
@@ -145,8 +200,9 @@ karu/
 
 ## Subsystem Documentation
 
-* **[Frontend Documentation](./frontend/README.md)**: Details Next.js App Router architecture, TipTap extension design, physical page height calculations, state management, form validations, and client route protection.
-* **[Backend Documentation](./backend/README.md)**: Details the Go Gin architecture, pgxpool database configuration, optimistic concurrency controls, version checkpoint restoration, multi-tenant security isolation, and complete API endpoint reference.
+* **[Frontend Documentation](./frontend/README.md)**: Details Next.js 16 App Router architecture, TipTap extension design, physical page height calculations, client-side cryptographic engine (`lib/crypto`), state management, form validations, and route protection.
+* **[Backend Documentation](./backend/README.md)**: Details the Go Gin architecture, pgxpool database configuration, 3-tier key persistence, optimistic concurrency controls, version checkpoint restoration, multi-tenant security isolation, and complete API endpoint reference.
+* **[Security Architecture & Threat Model](./docs/SECURITY_ARCHITECTURE.md)**: Comprehensive cryptographic specifications, threat models, attack surface mitigations, and defense-in-depth security policies.
 
 ---
 
@@ -154,13 +210,23 @@ karu/
 
 ### Implemented Features
 
+* **Zero-Knowledge End-to-End Encryption (E2EE)**:
+  * **3-Tier Key Hierarchy**: $\text{UEK} \rightarrow \text{PEK} \rightarrow \text{SCK} \rightarrow \text{AES-256-GCM Document}$.
+  * **User Encryption Identity**: ECDH P-256 asymmetric keypairs with encrypted private keys stored in `user_encryption_identities`.
+  * **Emergency Recovery Kit**: Base32 checksummed recovery key generation and downloadable recovery kit (`.txt`).
+  * **Automatic PEK Generation**: Project creation modals automatically generate and wrap a `PEK` with the active `UEK`.
+  * **Autosave Encryption Loop**: TipTap document JSON is encrypted client-side with fresh 12-byte IVs before transmission.
+  * **Secure Decrypt & Load Flow**: Automatic decryption in editor, preview mode, and export modal when the encryption session is unlocked.
+  * **Locked Workspace Canvas**: Elegant lock banner preventing plaintext/ciphertext leaks when the session is locked.
+  * **E2EE Version Checkpoints**: Named snapshots and zero-knowledge atomic restorations preserving ciphertext and IVs.
+  * **Legacy Plaintext Migration**: In-place batch migration tool in Settings converting legacy unencrypted projects to 3-tier E2EE.
 * **Landing Page**: Cinematic hero section, product showcase, clean navigation, and call-to-actions.
 * **Multi-Provider Authentication**:
-  * Email and password registration & login with bcrypt password hashing.
+  * Email/password registration & login with bcrypt (cost 10).
   * Google OAuth sign-in flow via Goth and session tokens.
-  * Automatic account identity linking (e.g., linking Google auth to an existing email account).
+  * Automatic account identity linking.
   * Database-backed refresh tokens with SHA-256 hashing, strict token rotation, and instant logout revocation.
-* **Route Protection & Security**: Next.js middleware intercepting unauthenticated requests to `/dashboard`, `/projects`, and `/settings`, with silent JWT refresh handling on 401 API responses.
+* **Route Protection & Security**: Next.js Edge middleware intercepting unauthenticated requests, with silent JWT refresh handling on 401 API responses.
 * **Project Dashboard**:
   * Filter projects by status (`All`, `In Progress`, `Completed`, `Drafts`).
   * Live search across project titles, loglines, and genres.
@@ -171,7 +237,7 @@ karu/
   * **Settings Tab**: Project title, logline, genre, format, synopsis updates, project archiving, and permanent deletion with confirmation guard.
 * **Screenplay Editor**:
   * Custom TipTap nodes (`ScreenplayParagraph` and `ScreenplayHeading`) supporting 6 industry-standard element types: Scene Heading, Action, Character, Dialogue, Parenthetical, and Transition.
-  * Keyboard navigation shortcuts: `Tab` cycles element types; `Enter` creates context-aware continuation blocks (e.g., Character $\rightarrow$ Dialogue $\rightarrow$ Action).
+  * Keyboard navigation shortcuts: `Tab` cycles element types; `Enter` creates context-aware continuation blocks.
   * Element formatting toolbar with undo, redo, and element selection.
   * Collapsible Scene Navigator with slugline jumping.
   * Autosave with visual status indicators (`Saving...` / `Saved`) and optimistic concurrency conflict management.
@@ -187,44 +253,7 @@ karu/
   * **PDF**: Print-ready formatted layout via browser print engine.
   * **Fountain**: Standard plain text `.fountain` format with scene and character tags.
   * **Plain Text**: Standard indented `.txt` screenplay format.
-* **Screenplay Version History (Backend)**:
-  * Named checkpoint creation (`POST /api/v1/screenplays/:id/versions`).
-  * Checkpoint listing and historical version retrieval.
-  * Transactional version restoration with automatic restore checkpoints (`POST /api/v1/screenplays/:id/versions/:versionId/restore`).
 * **Multi-Tenant Ownership Isolation**: Strict database query filters preventing cross-tenant project or screenplay access, returning `404 Not Found` on unauthorized access attempts.
-
-### In Progress
-
-* Frontend UI integration for the backend screenplay version history snapshots and rollback modal.
-* Automated offline draft caching in IndexedDB.
-
-### Planned (Future Roadmap)
-
-* **End-to-End Encryption (E2EE)**: Client-side encryption of screenplay content using AES-GCM before transmission to the database.
-* **Multi-User Collaboration & Sharing**: Project invitation system, role-based access control (Viewer, Commenter, Co-Writer), and public/private key wrapping for secure screenplay key distribution.
-* **Server-Side PDF Rendering**: Dedicated headless Chromium or Typst PDF generation pipeline.
-
----
-
-## Authentication & Security Overview
-
-### Implemented Security Controls
-
-| Security Layer | Implementation |
-| :--- | :--- |
-| **Password Storage** | Passwords hashed using `bcrypt` (cost 10). |
-| **Access Tokens** | Short-lived signed JWTs (HS256) expiring in 60 minutes. |
-| **Refresh Tokens** | Cryptographically secure random 32-byte tokens, hashed with SHA-256 before storage in PostgreSQL. |
-| **Token Rotation** | Every refresh request revokes the existing refresh token and issues a new token pair. |
-| **Session Revocation** | Explicit logout marks refresh tokens as revoked in the database. |
-| **Route Protection** | Next.js Edge Middleware checks `karu_access_token` cookies for protected routes. |
-| **Tenant Isolation** | All backend queries enforce `user_id` ownership checks across `projects`, `screenplays`, `contents`, and `versions`. Unauthorized queries return `404 Not Found`. |
-| **CORS Policy** | Strict origin validation configured via `CORS_ALLOWED_ORIGINS`. |
-
-### Security Limitations & Disclaimers
-
-* **End-to-End Encryption (E2EE)**: **Not currently implemented.** Screenplay text is stored in PostgreSQL as plaintext in `screenplay_contents` and `screenplay_versions`.
-* **Collaborative Sharing**: **Not currently implemented.** Screenplay access is restricted strictly to the project owner.
 
 ---
 
@@ -249,8 +278,6 @@ When multiple tabs or clients edit a screenplay, Karu prevents overwriting newer
 Client A (Rev 3) ─── PUT /content (rev=3) ───► Backend [DB Rev=3] ──► Success (DB Rev=4)
 Client B (Rev 3) ─── PUT /content (rev=3) ───► Backend [DB Rev=4] ──► 409 Conflict (REVISION_CONFLICT)
 ```
-
-If a client attempts to save with a stale revision number, the server returns `409 Conflict` with error code `REVISION_CONFLICT`.
 
 ---
 
@@ -317,7 +344,7 @@ In a separate terminal, navigate to the `frontend` directory:
 
 ```bash
 cd frontend
-cp .env.example .env.local    # or verify NEXT_PUBLIC_API_URL=http://localhost:8080/api/v1
+cp .env.example .env.local
 pnpm install
 pnpm dev
 ```
@@ -328,26 +355,31 @@ The frontend development server will be available at `http://localhost:3000`.
 
 ## Testing & Quality Assurance
 
+### Cryptographic Unit Test Suite
+
+Run the full 12-suite Web Crypto E2EE tests:
+
+```bash
+cd frontend
+pnpm test:crypto
+```
+
+### End-to-End Browser Automation (Playwright)
+
+Run the full 21-test browser automation suite against the live frontend and backend:
+
+```bash
+cd frontend
+node scripts/e2e-browser-test.mjs
+```
+
 ### Backend Verification
 
-Run unit tests:
+Run unit & integration tests:
 
 ```bash
 cd backend
 make test
-```
-
-Run full integration tests (with Testcontainers PostgreSQL instance):
-
-```bash
-cd backend
-make itest
-```
-
-Or run all backend tests directly:
-
-```bash
-cd backend
 go test ./... -v
 ```
 
@@ -360,86 +392,13 @@ go build ./...
 
 ### Frontend Verification
 
-Run TypeScript typecheck:
+Run TypeScript typecheck & lint:
 
 ```bash
 cd frontend
 pnpm exec tsc --noEmit
-```
-
-Run ESLint:
-
-```bash
-cd frontend
 pnpm lint
-```
-
-Verify production build:
-
-```bash
-cd frontend
 pnpm build
-```
-
----
-
-## Environment Variables
-
-### Backend (`/backend/.env`)
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `PORT` | `8080` | Port for the Go HTTP API server |
-| `APP_ENV` | `development` | Environment mode (`development`, `production`, `test`) |
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/karu?sslmode=disable` | Unified PostgreSQL connection string (Single Source of Truth) |
-| `DB_MAX_CONNS` | `25` | Maximum database pool connections |
-| `DB_MIN_CONNS` | `2` | Minimum idle database pool connections |
-| `JWT_ACCESS_SECRET` | *(secret)* | Secret key for signing JWT access tokens |
-| `JWT_ACCESS_EXPIRATION` | `60` | Access token lifetime in minutes |
-| `JWT_REFRESH_SECRET` | *(secret)* | Secret key for signing JWT refresh tokens |
-| `JWT_REFRESH_EXPIRATION` | `7` | Refresh token lifetime in days |
-| `GOTH_SESSION_SECRET` | *(secret)* | Secret for Goth session cookie store |
-| `GOOGLE_CLIENT_ID` | *(client id)* | Google Cloud OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` | *(client secret)* | Google Cloud OAuth 2.0 Client Secret |
-| `GOOGLE_REDIRECT_URL` | `http://localhost:8080/api/v1/auth/google/callback` | Google OAuth redirect callback URL |
-| `FRONTEND_URL` | `http://localhost:3000` | Frontend application base URL |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Allowed CORS origins (comma-separated) |
-
-### Frontend (`/frontend/.env.local`)
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8080/api/v1` | Base URL of the Go backend API |
-
----
-
-## Future Architecture (Planned)
-
-### 1. End-to-End Encryption (E2EE) Pipeline
-
-When implemented, screenplays will be encrypted on the client device before transmission:
-
-```text
-Screenplay Content
-       │
-       ▼
-Generate Random 256-bit Key (DEK)
-       │
-       ▼
-AES-GCM-256 Encryption ────────► Encrypted Screenplay Blob ──► PostgreSQL
-       │
-       ▼
-Wrap DEK with User Master Key ──► Encrypted Key Storage
-```
-
-### 2. Multi-Party Key Wrapping for Collaboration
-
-When project sharing is introduced, the Document Encryption Key (DEK) will be wrapped with each recipient's public key:
-
-```text
-Document Key (DEK)
-       ├── Wrapped with Owner Public Key ────► Owner Key Wrapper
-       └── Wrapped with Collaborator Public Key ──► Collaborator Key Wrapper
 ```
 
 ---

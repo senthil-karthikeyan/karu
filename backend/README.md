@@ -1,6 +1,6 @@
 # Karu Backend
 
-The backend service for **Karu**, a high-performance screenplay writing and film project development platform. Built with **Go 1.24+**, **Gin HTTP framework**, **PostgreSQL 16**, **pgx/v5**, **sqlc**, **golang-migrate**, and **Testcontainers-Go**.
+The backend service for **Karu**, a high-performance screenplay writing and film project development platform. Built with **Go 1.24+**, **Gin HTTP framework**, **PostgreSQL 16**, **pgx/v5**, **sqlc**, **golang-migrate**, and **Zero-Knowledge 3-Tier E2EE Storage**.
 
 ---
 
@@ -8,7 +8,7 @@ The backend service for **Karu**, a high-performance screenplay writing and film
 
 * **Language**: [Go](https://go.dev/) 1.24+ / 1.27
 * **HTTP Framework**: [Gin Web Framework](https://github.com/gin-gonic/gin)
-* **Database Driver**: [pgx/v5](https://github.com/jackc/pgx/v5) with `pgxpool.Pool`
+* **Database Driver**: [pgx/v5](https://github.com/jackc/pgx/v5) with `pgxpool.Pool` (using `QueryExecModeSimpleProtocol`)
 * **Query Generator**: [sqlc](https://sqlc.dev/) (Type-safe Go code from SQL)
 * **Database Migrations**: [golang-migrate/migrate](https://github.com/golang-migrate/migrate)
 * **Authentication**: [golang-jwt/jwt/v5](https://github.com/golang-jwt/jwt) + [bcrypt](https://pkg.go.dev/golang.org/x/crypto/bcrypt)
@@ -37,7 +37,7 @@ The backend implements a clean, layered architecture ensuring strict separation 
                     ┌─────────────────────────────────┐
                     │      Middleware Pipeline        │
                     │  RequestID • Logger • Recovery  │
-                    │      CORS • AuthMiddleware      │
+                    │  SecurityHeaders • CORS • Auth  │
                     └────────────────┬────────────────┘
                                      │
                                      ▼
@@ -90,18 +90,22 @@ backend/
 ├── db/
 │   ├── migrations/            # Versioned SQL migrations (golang-migrate)
 │   │   ├── 000001_initial_schema.up.sql
-│   │   ├── 000001_initial_schema.down.sql
 │   │   ├── 000002_auth_identities_and_screenplays.up.sql
-│   │   └── 000002_auth_identities_and_screenplays.down.sql
+│   │   ├── 000003_e2ee_support.up.sql
+│   │   ├── 000004_e2ee_support.up.sql
+│   │   ├── 000005_user_encryption_identities.up.sql
+│   │   └── 000006_project_keys.up.sql
 │   └── queries/               # sqlc SQL query definitions
 │       ├── activities.sql
 │       ├── auth_identities.sql
+│       ├── project_keys.sql
 │       ├── projects.sql
 │       ├── refresh_tokens.sql
 │       ├── scenes.sql
 │       ├── screenplay_contents.sql
 │       ├── screenplay_versions.sql
 │       ├── screenplays.sql
+│       ├── user_encryption_identities.sql
 │       └── users.sql
 ├── internal/
 │   ├── auth/                  # Password hashing (bcrypt), JWT, and Goth OAuth
@@ -111,7 +115,7 @@ backend/
 │   ├── config/                # Environment variable loader and parser
 │   ├── database/              # pgxpool lifecycle, health checks & migration runner
 │   ├── handler/               # Gin HTTP request handlers & validation
-│   ├── middleware/            # JWT authentication, CORS, logging, recovery, request ID
+│   ├── middleware/            # Security headers, JWT auth, CORS, logging, recovery, request ID
 │   ├── model/                 # Domain models, request/response DTOs, error definitions
 │   ├── repository/            # Repository pattern wrapping sqlc queries
 │   ├── router/                # Endpoint routing and middleware attachment
@@ -162,121 +166,52 @@ Karu implements a multi-provider authentication system supporting both tradition
 * **Token Rotation**: Every call to `POST /api/v1/auth/refresh` revokes the old refresh token and issues a completely new access/refresh token pair.
 * **Session Revocation**: Calling `POST /api/v1/auth/logout` sets `revoked_at = NOW()` on the refresh token session.
 
-### 3. Testing OAuth Abstraction
-The `auth.OAuthAuthenticator` interface decouples the HTTP layer from external OAuth networks:
-* `InitGoth(...)`: Production implementation using Goth and Google OAuth.
-* `MockOAuthAuthenticator`: Test implementation enabling automated CI/CD unit and integration testing without external network requests.
+---
+
+## 🔐 Zero-Knowledge 3-Tier End-to-End Encryption (E2EE)
+
+The Go backend operates on a strict **Zero-Knowledge Principle**:
+
+1. **Zero Plaintext Exposure**: Screenplay content, revisions, and checkpoints exist only as AES-256-GCM ciphertext blobs with associated 12-byte IVs and 128-bit authentication tags.
+2. **Zero Key Knowledge**: The backend stores only wrapped keys:
+   - `user_encryption_identities`: Stores the user's public ECDH key (SPKI) and wrapped private key (PKCS#8 wrapped with UEK).
+   - `project_keys`: Stores the random `PEK` wrapped with the user's `UEK`.
+   - `screenplay_keys`: Stores the random `SCK` wrapped with the project's `PEK`.
+3. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies the historical encrypted payload directly into `screenplay_content` without server-side decryption.
 
 ---
 
-## 📜 Screenplay Engine & Concurrency
+## 🛡 Security Middleware & Defense-in-Depth
 
-### Domain Model Hierarchy
+The backend attaches global security middleware on all routes:
 
-```text
-users
-  └── projects
-        ├── scenes
-        ├── activities
-        └── screenplays
-              ├── screenplay_contents (current content + revision)
-              └── screenplay_versions (immutable checkpoints)
+```go
+r.Use(middleware.RequestID())
+r.Use(middleware.Logger())
+r.Use(middleware.Recovery())
+r.Use(middleware.SecurityHeaders())
+r.Use(middleware.CORS(deps.Config.CORS))
 ```
 
-### 1. Autosave with Optimistic Concurrency Control (OCC)
-
-To prevent multiple editing sessions from overwriting each other, the `screenplay_contents` table maintains an integer `revision` counter:
-
-```sql
-UPDATE screenplay_contents
-SET
-    content = $3,
-    revision = revision + 1,
-    updated_at = NOW()
-WHERE screenplay_id = $1 AND revision = $2
-RETURNING id, screenplay_id, content, revision, updated_at;
-```
-
-* **Save Request**: The client sends `PUT /api/v1/screenplays/:id/content` with `{ "content": "...", "revision": N }`.
-* **Success**: If the database revision matches $N$, the content is updated, `revision` is incremented to $N+1$, and the updated record is returned with `200 OK`.
-* **Conflict**: If the database revision is already higher (e.g., modified by another tab or device), the query updates 0 rows. The handler immediately returns `409 Conflict` with error code `REVISION_CONFLICT`.
-
-### 2. Version History & Checkpoints
-
-* **Create Checkpoint**: `POST /api/v1/screenplays/:id/versions` creates an immutable named snapshot in `screenplay_versions` with an auto-incrementing `version_number`.
-* **Retrieve Historical Checkpoints**: List all versions or fetch a specific historical snapshot by ID.
-* **Transactional Restoration**: `POST /api/v1/screenplays/:id/versions/:versionId/restore` performs an atomic transaction that:
-  1. Retrieves the target historical snapshot content.
-  2. Overwrites the live `screenplay_contents` content and increments its `revision`.
-  3. Automatically inserts a new version checkpoint titled `"Restored from Version X (...) "` to preserve audit history.
-
----
-
-## 🛡 Authorization & Multi-Tenant Isolation
-
-The backend enforces multi-tenant data isolation at the database query layer:
-* Every project, screenplay, scene, content, and version query joins through `projects.user_id = :authenticated_user_id`.
-* Unauthorized attempts to access, modify, or delete another user's projects or screenplays return `404 Not Found` rather than `403 Forbidden` to prevent resource enumeration.
+### Security Headers Attached:
+* `X-Content-Type-Options: nosniff`
+* `X-Frame-Options: DENY`
+* `X-XSS-Protection: 1; mode=block`
+* `Referrer-Policy: strict-origin-when-cross-origin`
+* `Permissions-Policy: geolocation=(), camera=(), microphone=()`
 
 ---
 
 ## 🗄 Database & Migrations
 
-### Unified `DATABASE_URL` Configuration
-
-The database connection is managed entirely through a single `DATABASE_URL` connection string:
-
-```text
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/karu?sslmode=disable
-```
-
-* **Connection Pooling**: Managed via `pgxpool.Pool` with configurable `DB_MAX_CONNS` and `DB_MIN_CONNS`.
-* **Migration Compatibility**: `internal/database/migrate.go` normalizes `postgres://` or `postgresql://` connection strings to `pgx5://` for the `golang-migrate` pgx driver.
-
 ### Applied Database Migrations
 
 1. `000001_initial_schema`: Initial schema defining `users`, `projects`, `scenes`, and `activities`.
 2. `000002_auth_identities_and_screenplays`: Adds `auth_identities`, `refresh_tokens`, `screenplays`, `screenplay_contents`, and `screenplay_versions`.
-3. `000003_e2ee_support`: Adds `user_encryption_metadata` (salt & PBKDF2 settings), `screenplay_keys` (wrapped SCKs), and extends `screenplay_contents` and `screenplay_versions` with `is_encrypted`, `encryption_version`, `algorithm`, `iv`, and `ciphertext`.
-
----
-
-## 🔐 Zero-Knowledge End-to-End Encryption (E2EE)
-
-Karu features a **zero-knowledge cryptographic architecture** where screenplay content is encrypted and decrypted strictly client-side via the Web Crypto API before transmission:
-
-```text
-               CLIENT BROWSER                                  BACKEND (Zero-Knowledge)
- ┌──────────────────────────────────────────┐          ┌──────────────────────────────────────┐
- │ Passphrase ──[PBKDF2-SHA256 600k]──► UEK │          │                                      │
- │                                    │     │          │  user_encryption_metadata            │
- │                                    ▼     │  Store   │  • user_id                           │
- │ Screenplay Content Key (SCK) ──► Wrapped ├─────────►│  • salt (16 bytes base64)            │
- │             │                            │   SCK    │  • iterations: 600,000               │
- │             ▼                            │          │  • hash_algorithm: "SHA-256"         │
- │   TipTap Document JSON                   │          │                                      │
- │             │                            │          │  screenplay_keys                     │
- │      [AES-GCM 256-bit]                   │          │  • screenplay_id                     │
- │             │                            │  Store   │  • user_id                           │
- │             ▼                            ├─────────►│  • wrapped_key & 12-byte IV          │
- │      EncryptedPayload                    │Ciphertext│                                      │
- │  • iv: 12-byte base64                    │          │  screenplay_contents                 │
- │  • ciphertext: base64                    │          │  • is_encrypted: true                │
- │  • version: 1, algo: "AES-GCM"           │          │  • iv & ciphertext (opaque bytes)    │
- └──────────────────────────────────────────┘          └──────────────────────────────────────┘
-```
-
-### Key Cryptographic Invariants
-1. **Zero Knowledge**: The Go backend **never** receives or stores passphrases, unwrapped keys, or plaintext document content.
-2. **Key Hierarchy**:
-   - **UEK (User Encryption Key)**: AES-GCM 256-bit key derived client-side from the user's passphrase and per-user salt via PBKDF2 (SHA-256, 600,000 iterations).
-   - **SCK (Screenplay Content Key)**: Unique 256-bit AES-GCM key generated per screenplay and wrapped by the UEK.
-3. **Payload Structure**: All encrypted screenplay contents and version checkpoints are stored with:
-   - `version: 1`
-   - `algorithm: "AES-GCM"`
-   - `iv`: Base64-encoded 96-bit (12-byte) initialization vector.
-   - `ciphertext`: Base64-encoded ciphertext with 128-bit GCM authentication tag.
-4. **Backward Compatibility**: Non-encrypted screenplays (`is_encrypted: false`) continue to function alongside E2EE screenplays seamlessly.
+3. `000003_e2ee_support`: Adds `user_encryption_metadata` (salt & PBKDF2 settings), `screenplay_keys` (wrapped SCKs), and extends `screenplay_contents` and `screenplay_versions` with ciphertext fields.
+4. `000004_e2ee_support`: Fixes foreign key constraints on `screenplay_keys` to allow project and screenplay ID bindings.
+5. `000005_user_encryption_identities`: Adds `user_encryption_identities` table for ECDH P-256 asymmetric identity key storage.
+6. `000006_project_keys`: Adds `project_keys` table for Project Encryption Key (`PEK`) wrapping and storage.
 
 ---
 
@@ -301,7 +236,7 @@ Karu features a **zero-knowledge cryptographic architecture** where screenplay c
 | `GET` | `/api/v1/auth/google` | No | Initiate Google OAuth flow via Goth |
 | `GET` | `/api/v1/auth/google/callback` | No | Complete Google OAuth callback and issue tokens |
 
-### User Profile & Encryption Metadata
+### User Profile & Encryption Identities
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
@@ -309,8 +244,11 @@ Karu features a **zero-knowledge cryptographic architecture** where screenplay c
 | `PATCH` | `/api/v1/users/me` | **Yes** | Update user name, bio, avatar, or editor preferences |
 | `GET` | `/api/v1/users/me/encryption-metadata` | **Yes** | Get user's salt and PBKDF2 parameters for deriving UEK |
 | `POST` | `/api/v1/users/me/encryption-metadata` | **Yes** | Set or update user's encryption salt and PBKDF2 configuration |
+| `GET` | `/api/v1/users/me/encryption-identity` | **Yes** | Retrieve authenticated user's ECDH P-256 identity keypair |
+| `POST` | `/api/v1/users/me/encryption-identity` | **Yes** | Store or update user's ECDH P-256 identity keypair |
+| `GET` | `/api/v1/users/:id/public-key` | **Yes** | Retrieve public key (SPKI) for another user by ID |
 
-### Projects & Scenes
+### Projects & Project Keys
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
@@ -319,6 +257,8 @@ Karu features a **zero-knowledge cryptographic architecture** where screenplay c
 | `GET` | `/api/v1/projects/:id` | **Yes** | Get project details including scene list |
 | `PATCH` | `/api/v1/projects/:id` | **Yes** | Update project metadata or status |
 | `DELETE` | `/api/v1/projects/:id` | **Yes** | Delete project and cascade all related data |
+| `GET` | `/api/v1/projects/:id/key` | **Yes** | Retrieve wrapped Project Encryption Key (`PEK`) |
+| `POST` | `/api/v1/projects/:id/key` | **Yes** | Store or update wrapped Project Encryption Key (`PEK`) |
 | `GET` | `/api/v1/projects/:id/scenes` | **Yes** | List scenes for a project in order |
 | `POST` | `/api/v1/projects/:id/scenes` | **Yes** | Create a new scene |
 | `PATCH` | `/api/v1/projects/:id/scenes/:sceneId` | **Yes** | Update scene slugline, location, or summary |
@@ -330,47 +270,18 @@ Karu features a **zero-knowledge cryptographic architecture** where screenplay c
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/projects/:id/screenplays` | **Yes** | List all screenplays within a project |
-| `POST` | `/api/v1/projects/:id/screenplays` | **Yes** | Create a screenplay with initial revision and optional wrapped key |
+| `POST` | `/api/v1/projects/:id/screenplays` | **Yes** | Create a screenplay with initial revision |
 | `GET` | `/api/v1/screenplays/:id` | **Yes** | Get screenplay details and current content |
 | `PATCH` | `/api/v1/screenplays/:id` | **Yes** | Update screenplay title or description |
 | `DELETE` | `/api/v1/screenplays/:id` | **Yes** | Delete screenplay |
-| `GET` | `/api/v1/screenplays/:id/key` | **Yes** | Retrieve authenticated user's wrapped SCK for this screenplay |
-| `POST` | `/api/v1/screenplays/:id/key` | **Yes** | Store or update wrapped SCK for this screenplay |
-| `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current content (plaintext or ciphertext) and revision |
+| `GET` | `/api/v1/screenplays/:id/key` | **Yes** | Retrieve authenticated user's wrapped SCK |
+| `POST` | `/api/v1/screenplays/:id/key` | **Yes** | Store or update wrapped SCK |
+| `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current content (ciphertext or plaintext) and revision |
 | `PUT` | `/api/v1/screenplays/:id/content` | **Yes** | Autosave content with OCC (returns 409 on revision conflict) |
 | `GET` | `/api/v1/screenplays/:id/versions` | **Yes** | List historical version checkpoints |
 | `POST` | `/api/v1/screenplays/:id/versions` | **Yes** | Create a named version checkpoint (stores ciphertext snapshot) |
 | `GET` | `/api/v1/screenplays/:id/versions/:versionId` | **Yes** | Retrieve a specific historical version snapshot |
 | `POST` | `/api/v1/screenplays/:id/versions/:versionId/restore` | **Yes** | Transactionally restore screenplay to historical version |
-
----
-
-## 📬 Response Envelope Format
-
-### Success Response (`200 OK` / `201 Created`)
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "title": "The Quantum Paradox",
-    "revision": 3
-  }
-}
-```
-
-### Error Response (`4xx` / `5xx`)
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "REVISION_CONFLICT",
-    "message": "Screenplay content has been modified by another session. Please refresh."
-  }
-}
-```
 
 ---
 
@@ -440,27 +351,14 @@ make build
 make test
 ```
 
-Runs unit tests across `./internal/auth`, `./internal/model`, `./internal/service`, `./internal/handler`, and `./internal/router`.
-
 ### Run Integration Tests (Testcontainers)
 
 ```bash
 make itest
 ```
 
-Spins up a temporary `postgres:16-alpine` Docker container using Testcontainers-Go, executes all migrations, tests connection health, ACID transactions, multi-provider auth identities, refresh token rotation, project creation, optimistic concurrency autosave, version rollback, and multi-tenant isolation.
-
-### Run All Tests
+### Run All Backend Tests
 
 ```bash
 go test ./... -v
 ```
-
----
-
-## 👥 Multi-Tenancy & Security
-
-* **Zero-Knowledge Security**: Server stores only encrypted ciphertext, IVs, salts, and wrapped keys.
-* **Strict Ownership Validation**: All requests verify user ownership through `Project -> Screenplay -> Content / Keys / Versions`.
-* **Safe Error Semantics**: Unauthorized resource access returns `404 RESOURCE_NOT_FOUND` to prevent identifier enumeration.
-
