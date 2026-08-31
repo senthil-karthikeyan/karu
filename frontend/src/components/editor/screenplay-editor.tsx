@@ -32,6 +32,8 @@ import {
   ScreenplayNodes,
   ScreenplayShortcuts,
   ScreenplayAutoFormatting,
+  ScreenplaySmartDetection,
+  ScreenplayPasteHandler,
   ScreenplayPagination,
   normalizeScreenplayDoc,
 } from "./screenplay-extensions";
@@ -127,6 +129,8 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       }),
       ...ScreenplayNodes,
       ScreenplayAutoFormatting,
+      ScreenplaySmartDetection,
+      ScreenplayPasteHandler,
       ScreenplayShortcuts,
       ScreenplayPagination.configure({
         projectTitle: project.title,

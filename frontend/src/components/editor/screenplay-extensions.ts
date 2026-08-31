@@ -1,11 +1,13 @@
 import { Node, Extension, textblockTypeInputRule } from "@tiptap/react";
 import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import { Fragment, Slice, type Node as PMNode, type Schema } from "@tiptap/pm/model";
 import type { TipTapDocumentJSON } from "@/lib/crypto/crypto-types";
 
 export const screenplayPaginationPluginKey = new PluginKey("screenplayPagination");
 export const screenplayAutoFormattingPluginKey = new PluginKey("screenplayAutoFormatting");
+export const screenplayPasteHandlerPluginKey = new PluginKey("screenplayPasteHandler");
+export const screenplaySmartDetectionPluginKey = new PluginKey("screenplaySmartDetection");
 
 /**
  * Semantic Node: SceneHeading
@@ -738,6 +740,169 @@ export const ScreenplayPagination = Extension.create<ScreenplayPaginationOptions
               editorViewRef = null;
             },
           };
+        },
+      }),
+    ];
+  },
+});
+
+export const SCENE_HEADING_PATTERN =
+  /^(?:INT\.|EXT\.|INT\/EXT\.|I\/E\.|INT\.\/EXT\.|EST\.)\s+[A-Z0-9\s.,'/-]+(?:-\s*(?:DAY|NIGHT|DAWN|DUSK|CONTINUOUS|LATER|MOMENTS LATER|SAME TIME))?/i;
+
+export const TRANSITION_PATTERN =
+  /^(?:CUT TO:|FADE IN:|FADE OUT\.|FADE OUT:|SMASH CUT TO:|DISSOLVE TO:|MATCH CUT TO:|JUMP CUT TO:|BACK TO SCENE:|INTERCUT:|FAST CUT TO:|CROSSFADE:)\s*$/i;
+
+export const SHOT_PATTERN =
+  /^(?:CLOSE ON|CLOSE UP|ANGLE ON|WIDE SHOT|POV|INSERT|ESTABLISHING|TRACKING SHOT|AERIAL SHOT)\s*[:-]?\s*.+/i;
+
+export const PARENTHETICAL_PATTERN = /^\s*\([^)]*\)\s*$/;
+
+export const CHARACTER_PATTERN =
+  /^[A-Z0-9\s._'-]{2,35}(?:\s*\((?:V\.O\.|O\.S\.|CONT'D|FILTERED|PRE-LAP|SUBTITLE|M\.O\.S\.)\))?$/;
+
+/**
+ * Parses raw text lines into structured ProseMirror screenplay nodes.
+ */
+export function parseScreenplayTextToNodes(
+  text: string,
+  schema: Schema
+): PMNode[] {
+  const lines = text.split(/\r?\n/);
+  const nodes: PMNode[] = [];
+  let prevType = "action";
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    let nodeType = "action";
+
+    if (SCENE_HEADING_PATTERN.test(trimmed) || /^\.[A-Z]/.test(trimmed)) {
+      nodeType = "sceneHeading";
+    } else if (TRANSITION_PATTERN.test(trimmed) || /^>[^<]/.test(trimmed)) {
+      nodeType = "transition";
+    } else if (SHOT_PATTERN.test(trimmed)) {
+      nodeType = "shot";
+    } else if (
+      PARENTHETICAL_PATTERN.test(trimmed) &&
+      (prevType === "character" || prevType === "dialogue")
+    ) {
+      nodeType = "parenthetical";
+    } else if (
+      trimmed === trimmed.toUpperCase() &&
+      trimmed.length <= 35 &&
+      (prevType === "action" ||
+        prevType === "sceneHeading" ||
+        prevType === "dialogue" ||
+        prevType === "transition" ||
+        prevType === "shot") &&
+      !SCENE_HEADING_PATTERN.test(trimmed) &&
+      !TRANSITION_PATTERN.test(trimmed) &&
+      !SHOT_PATTERN.test(trimmed)
+    ) {
+      nodeType = "character";
+    } else if (prevType === "character" || prevType === "parenthetical") {
+      nodeType = "dialogue";
+    } else {
+      nodeType = "action";
+    }
+
+    prevType = nodeType;
+    const cleanText = trimmed.replace(/^[@.>~]/, "").trim();
+    const targetNodeType = schema.nodes[nodeType] || schema.nodes.action;
+    if (targetNodeType) {
+      nodes.push(
+        targetNodeType.create(
+          { dataType: nodeType === "sceneHeading" ? "scene-heading" : nodeType },
+          cleanText ? [schema.text(cleanText)] : []
+        )
+      );
+    }
+  }
+
+  return nodes;
+}
+
+/**
+ * Screenplay Paste Handler:
+ * Converts multi-line pasted plain text or screenplay formats directly into semantic TipTap nodes.
+ */
+export const ScreenplayPasteHandler = Extension.create({
+  name: "screenplayPasteHandler",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: screenplayPasteHandlerPluginKey,
+        props: {
+          handlePaste(view, event) {
+            const text = event.clipboardData?.getData("text/plain");
+            if (!text || !text.includes("\n")) {
+              return false;
+            }
+
+            const nodes = parseScreenplayTextToNodes(text, view.state.schema);
+            if (nodes.length > 0) {
+              const fragment = Fragment.fromArray(nodes);
+              const slice = new Slice(fragment, 0, 0);
+              const tr = view.state.tr.replaceSelection(slice);
+              view.dispatch(tr);
+              return true;
+            }
+            return false;
+          },
+        },
+      }),
+    ];
+  },
+});
+
+/**
+ * Screenplay Smart Element Detection:
+ * Automatically converts action blocks into sceneHeading, transition, or shot when recognized patterns are typed.
+ */
+export const ScreenplaySmartDetection = Extension.create({
+  name: "screenplaySmartDetection",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: screenplaySmartDetectionPluginKey,
+        appendTransaction(transactions, _oldState, newState) {
+          const docChanged = transactions.some((tr) => tr.docChanged);
+          if (!docChanged) return null;
+
+          let tr: Transaction | null = null;
+          const { selection } = newState;
+          const { $anchor } = selection;
+          const currentNode = $anchor.parent;
+
+          if (currentNode && currentNode.type.name === "action") {
+            const text = currentNode.textContent.trim();
+
+            if (SCENE_HEADING_PATTERN.test(text)) {
+              if (!tr) tr = newState.tr;
+              const pos = $anchor.before($anchor.depth);
+              tr.setNodeMarkup(pos, newState.schema.nodes.sceneHeading, {
+                dataType: "scene-heading",
+              });
+            } else if (TRANSITION_PATTERN.test(text)) {
+              if (!tr) tr = newState.tr;
+              const pos = $anchor.before($anchor.depth);
+              tr.setNodeMarkup(pos, newState.schema.nodes.transition, {
+                dataType: "transition",
+              });
+            } else if (SHOT_PATTERN.test(text)) {
+              if (!tr) tr = newState.tr;
+              const pos = $anchor.before($anchor.depth);
+              tr.setNodeMarkup(pos, newState.schema.nodes.shot, {
+                dataType: "shot",
+              });
+            }
+          }
+
+          return tr;
         },
       }),
     ];
