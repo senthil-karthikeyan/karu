@@ -25,6 +25,8 @@ import {
   generateScreenplayContentKey,
   wrapScreenplayKeyWithPEK,
   unwrapScreenplayKeyWithPEK,
+  wrapScreenplayContentKeyWithUEK,
+  unwrapScreenplayContentKeyWithUEK,
   generateUserIdentityKeyPair,
   exportUserIdentityPublicKey,
   wrapUserPrivateKeyWithUEK,
@@ -555,6 +557,87 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     }
     if (normalized.content?.[0].content?.[0].text !== "EXT. DESERT - DAWN") {
       throw new Error("Normalized text content corrupted!");
+    }
+  });
+
+  // 16. Simplified 2-Tier Hierarchy: Direct Passphrase -> UEK -> SCK -> Content
+  await test("Simplified 2-Tier Hierarchy: Direct Passphrase -> UEK -> SCK -> Content Roundtrip", async () => {
+    const secret = "writer-master-secret";
+    const salt = generateSalt(16);
+
+    // 1. Derive UEK directly from secret + salt
+    const uek = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
+
+    // 2. Generate independent random SCK for screenplay
+    const sck = await generateScreenplayContentKey();
+
+    // 3. Wrap SCK directly with UEK (2-tier direct wrap)
+    const wrappedSCK = await wrapScreenplayContentKeyWithUEK(uek, sck);
+
+    // 4. Encrypt screenplay TipTap AST
+    const doc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [
+        {
+          type: "sceneHeading",
+          content: [{ type: "text", text: "INT. WRITER ROOM - NIGHT" }],
+        },
+        {
+          type: "action",
+          content: [{ type: "text", text: "The simplified 2-tier architecture executes cleanly." }],
+        },
+      ],
+    };
+    const encrypted = await encryptScreenplayContent(doc, sck);
+
+    // 5. Decrypt workflow: Re-derive UEK -> Unwrap SCK directly -> Decrypt AST
+    const restoredUEK = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
+    const restoredSCK = await unwrapScreenplayContentKeyWithUEK(restoredUEK, wrappedSCK);
+    const decryptedDoc = await decryptScreenplayContent(encrypted, restoredSCK);
+
+    if (JSON.stringify(decryptedDoc) !== JSON.stringify(doc)) {
+      throw new Error("2-tier direct encryption/decryption roundtrip failed!");
+    }
+  });
+
+  // 17. E2EE Migration: Seamless 3-Tier (PEK) to 2-Tier (Direct UEK) SCK Re-wrapping
+  await test("E2EE Migration: Seamless 3-Tier (PEK) to 2-Tier (Direct UEK) SCK Re-wrapping", async () => {
+    const secret = "legacy-writer-secret";
+    const salt = generateSalt(16);
+    const uek = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
+
+    // Old 3-Tier: PEK wrapped with UEK, SCK wrapped with PEK
+    const pek = await generateProjectEncryptionKey();
+    const legacyWrappedPEK = await wrapProjectKeyWithUEK(uek, pek);
+    const sck = await generateScreenplayContentKey();
+    const legacyWrappedSCK = await wrapScreenplayKeyWithPEK(pek, sck);
+
+    // Document encrypted with SCK
+    const doc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [
+        {
+          type: "sceneHeading",
+          content: [{ type: "text", text: "EXT. RETROFITTED CINEMA - DAY" }],
+        },
+      ],
+    };
+    const encrypted = await encryptScreenplayContent(doc, sck);
+
+    // --- MIGRATION SIMULATION ---
+    // 1. Unwrap PEK using UEK
+    const unwrappedPEK = await unwrapProjectKeyWithUEK(uek, legacyWrappedPEK);
+    // 2. Unwrap legacy SCK using PEK
+    const unwrappedSCK = await unwrapScreenplayKeyWithPEK(unwrappedPEK, legacyWrappedSCK);
+    // 3. Re-wrap SCK directly using UEK (New 2-Tier)
+    const new2TierWrappedSCK = await wrapScreenplayContentKeyWithUEK(uek, unwrappedSCK);
+
+    // Verify the newly wrapped key un-wraps directly with UEK and decrypts the document
+    const restoredSCK = await unwrapScreenplayContentKeyWithUEK(uek, new2TierWrappedSCK);
+    const decryptedDoc = await decryptScreenplayContent(encrypted, restoredSCK);
+
+    if (JSON.stringify(decryptedDoc) !== JSON.stringify(doc)) {
+      throw new Error("Migrated 2-tier key failed to decrypt existing document!");
     }
   });
 

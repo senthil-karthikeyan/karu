@@ -212,13 +212,33 @@ export async function unwrapScreenplayKeyWithPEK(
 }
 
 /**
+ * Direct 2-tier wrapping: Wraps SCK directly with the User Encryption Key (UEK).
+ */
+export async function wrapScreenplayContentKeyWithUEK(
+  uek: CryptoKey,
+  sck: CryptoKey
+): Promise<WrappedKeyPayload> {
+  return wrapProjectKeyWithUEK(uek, sck);
+}
+
+/**
+ * Direct 2-tier unwrapping: Unwraps SCK directly using the User Encryption Key (UEK).
+ */
+export async function unwrapScreenplayContentKeyWithUEK(
+  uek: CryptoKey,
+  wrapped: WrappedKeyPayload
+): Promise<CryptoKey> {
+  return unwrapProjectKeyWithUEK(uek, wrapped);
+}
+
+/**
  * Backward-compatible helper: Wraps SCK with UEK directly.
  */
 export async function wrapScreenplayContentKey(
   uek: CryptoKey,
   sck: CryptoKey
 ): Promise<WrappedKeyPayload> {
-  return wrapProjectKeyWithUEK(uek, sck);
+  return wrapScreenplayContentKeyWithUEK(uek, sck);
 }
 
 /**
@@ -228,7 +248,7 @@ export async function unwrapScreenplayContentKey(
   uek: CryptoKey,
   wrapped: WrappedKeyPayload
 ): Promise<CryptoKey> {
-  return unwrapProjectKeyWithUEK(uek, wrapped);
+  return unwrapScreenplayContentKeyWithUEK(uek, wrapped);
 }
 
 // =============================================================================

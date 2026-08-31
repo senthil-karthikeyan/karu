@@ -343,34 +343,16 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   },
 
   /**
-   * Generates a new random Screenplay Content Key (SCK).
-   * If a projectId is provided and its PEK is available/loaded, wraps SCK with PEK (3-tier).
-   * Otherwise falls back to wrapping with active UEK (2-tier direct).
+   * Generates a new random Screenplay Content Key (SCK) and wraps it directly with the active UEK (2-tier).
    */
-  createAndWrapScreenplayKey: async (screenplayId: string, projectId?: string) => {
-    const { activeUEK, projectKeys, loadAndUnlockProjectKey } = get();
+  createAndWrapScreenplayKey: async (screenplayId: string) => {
+    const { activeUEK } = get();
     if (!activeUEK) {
       throw new Error("Encryption is locked. Please unlock with your encryption secret first.");
     }
 
     const sck = await generateScreenplayContentKey();
-    let wrappedKey: WrappedKeyPayload;
-
-    if (projectId) {
-      let pek = projectKeys[projectId];
-      if (!pek) {
-        try {
-          pek = await loadAndUnlockProjectKey(projectId);
-        } catch {
-          // If no PEK exists yet for project, generate one
-          const created = await get().createAndWrapProjectKey(projectId);
-          pek = created.pek;
-        }
-      }
-      wrappedKey = await wrapScreenplayKeyWithPEK(pek, sck);
-    } else {
-      wrappedKey = await wrapScreenplayContentKey(activeUEK, sck);
-    }
+    const wrappedKey = await wrapScreenplayContentKeyWithUEK(activeUEK, sck);
 
     // Persist wrapped SCK to backend
     try {
@@ -391,10 +373,13 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
 
   /**
    * Loads the wrapped key for a screenplay from the backend and unwraps it into memory.
-   * Tries PEK unwrapping first if projectId provided, falling back to UEK if needed.
+   * Uses direct 2-tier UEK unwrapping as primary, with seamless self-healing fallback for legacy 3-tier PEK keys.
    */
   loadAndUnlockScreenplayKey: async (screenplayId: string, projectId?: string) => {
-    const { activeUEK, projectKeys, loadAndUnlockProjectKey } = get();
+    const { activeUEK, screenplayKeys } = get();
+    if (screenplayKeys[screenplayId]) {
+      return screenplayKeys[screenplayId];
+    }
     if (!activeUEK) {
       throw new Error("Encryption is locked. Please unlock with your encryption secret first.");
     }
@@ -406,36 +391,37 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
       iv: rawKey.iv,
       wrappedKey: rawKey.wrappedKey,
     };
-    let sck: CryptoKey;
+    let sck: CryptoKey | null = null;
 
-    if (projectId) {
-      let pek = projectKeys[projectId];
-      if (!pek) {
+    // 1. Primary: Direct 2-tier UEK unwrapping
+    try {
+      sck = await unwrapScreenplayContentKeyWithUEK(activeUEK, wrappedKey);
+    } catch (directErr) {
+      // 2. Legacy fallback: Try 3-tier PEK unwrapping if projectId is provided
+      if (projectId) {
         try {
-          pek = await loadAndUnlockProjectKey(projectId);
-        } catch {
-          // fallback to activeUEK
-        }
-      }
-
-      if (pek) {
-        try {
+          const pek = await get().loadAndUnlockProjectKey(projectId);
           sck = await unwrapScreenplayKeyWithPEK(pek, wrappedKey);
+
+          // Self-healing migration: Re-wrap directly with active UEK and sync to backend
+          const migratedKey = await wrapScreenplayContentKeyWithUEK(activeUEK, sck);
+          await screenplaysApi.setScreenplayKey(screenplayId, migratedKey);
         } catch {
-          // Fallback to UEK for 2-tier legacy compatibility
-          sck = await unwrapScreenplayContentKey(activeUEK, wrappedKey);
+          throw new Error("Failed to unlock screenplay: invalid key or encryption secret.");
         }
       } else {
-        sck = await unwrapScreenplayContentKey(activeUEK, wrappedKey);
+        throw directErr;
       }
-    } else {
-      sck = await unwrapScreenplayContentKey(activeUEK, wrappedKey);
+    }
+
+    if (!sck) {
+      throw new Error("Unable to unwrap screenplay content key.");
     }
 
     set((state) => ({
       screenplayKeys: {
         ...state.screenplayKeys,
-        [screenplayId]: sck,
+        [screenplayId]: sck!,
       },
     }));
 
@@ -443,40 +429,28 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   },
 
   /**
-   * Unwraps a stored Screenplay Content Key (SCK) using PEK (if available) or UEK.
+   * Unwraps a stored Screenplay Content Key (SCK) using UEK (or PEK legacy fallback).
    */
   unlockScreenplayWithWrappedKey: async (
     screenplayId: string,
     wrappedKey: WrappedKeyPayload,
     projectId?: string
   ) => {
-    const { activeUEK, projectKeys, loadAndUnlockProjectKey } = get();
+    const { activeUEK } = get();
     if (!activeUEK) {
       throw new Error("Encryption is locked. Please unlock with your encryption secret first.");
     }
 
     let sck: CryptoKey;
-    if (projectId) {
-      let pek = projectKeys[projectId];
-      if (!pek) {
-        try {
-          pek = await loadAndUnlockProjectKey(projectId);
-        } catch {
-          // fallback
-        }
-      }
-
-      if (pek) {
-        try {
-          sck = await unwrapScreenplayKeyWithPEK(pek, wrappedKey);
-        } catch {
-          sck = await unwrapScreenplayContentKey(activeUEK, wrappedKey);
-        }
+    try {
+      sck = await unwrapScreenplayContentKeyWithUEK(activeUEK, wrappedKey);
+    } catch (err) {
+      if (projectId) {
+        const pek = await get().loadAndUnlockProjectKey(projectId);
+        sck = await unwrapScreenplayKeyWithPEK(pek, wrappedKey);
       } else {
-        sck = await unwrapScreenplayContentKey(activeUEK, wrappedKey);
+        throw err;
       }
-    } else {
-      sck = await unwrapScreenplayContentKey(activeUEK, wrappedKey);
     }
 
     set((state) => ({
