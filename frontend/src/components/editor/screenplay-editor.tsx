@@ -83,9 +83,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const updateProjectMutation = useUpdateProjectMutation(project.id);
   const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
   const screenplayKey = useEncryptionStore((state) => state.screenplayKeys[project.id]);
-  const createAndWrapScreenplayKey = useEncryptionStore(
-    (state) => state.createAndWrapScreenplayKey
-  );
 
   const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
@@ -172,8 +169,18 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           const firstSlugline = dynamicScenes[0]?.slugline || "INT. OPENING SCENE - DAY";
           let payloadToSave = html;
 
-          // Always get the latest in-memory SCK from the cryptographic store
-          const currentKey = useEncryptionStore.getState().screenplayKeys[project.id];
+          // Always get or derive the in-memory SCK from the cryptographic store (3-tier PEK hierarchy)
+          const store = useEncryptionStore.getState();
+          let currentKey = store.screenplayKeys[project.id];
+          if (!currentKey && store.isUnlocked) {
+            try {
+              const created = await store.createAndWrapScreenplayKey(project.id, project.id);
+              currentKey = created.sck;
+            } catch (kErr) {
+              console.warn("Could not derive or wrap screenplay key during save:", kErr);
+            }
+          }
+
           if (currentKey) {
             const encryptedPayload = await encryptScreenplayContent(json, currentKey);
             payloadToSave = JSON.stringify(encryptedPayload);
@@ -200,12 +207,21 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   useEffect(() => {
     const isEncrypted = !!parseEncryptedPayloadString(project.screenplayContent);
     
-    useEncryptionStore.getState().fetchUserMetadata().then((meta) => {
+    useEncryptionStore.getState().fetchUserMetadata().then(() => {
       if (isEncrypted && !isUnlocked) {
         setEncryptionDialogOpen(true);
       }
     });
   }, [project.screenplayContent, isUnlocked]);
+
+  // When unlocked, load the wrapped key for this project if not already in memory
+  useEffect(() => {
+    if (isUnlocked && !screenplayKey) {
+      useEncryptionStore.getState().loadAndUnlockScreenplayKey(project.id, project.id).catch((err) => {
+        console.debug("No existing wrapped key found or unable to unwrap:", err);
+      });
+    }
+  }, [isUnlocked, screenplayKey, project.id]);
 
   // Decrypt content when key becomes available in memory
   useEffect(() => {

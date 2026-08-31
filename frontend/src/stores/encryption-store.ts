@@ -7,7 +7,6 @@ import {
   type UserEncryptionMetadata,
   type WrappedKeyPayload,
   type WrappedProjectKeyPayload,
-  type WrappedScreenplayKeyPayload,
   type UserIdentityKeyPair,
   uint8ArrayToBase64,
   generateSalt,
