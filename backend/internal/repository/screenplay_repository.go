@@ -351,13 +351,20 @@ func (r *screenplayRepository) CreateScreenplay(
 
 	qtx := r.queries.WithTx(tx)
 
-	// 1. Insert Screenplay
+	// 1. Determine if this is the first screenplay (default)
+	existing, _ := qtx.ListScreenplaysByProjectID(ctx, generated.ListScreenplaysByProjectIDParams{
+		ProjectID: uuidToPgtype(projectID),
+		UserID:    uuidToPgtype(userID),
+	})
+	isDefault := len(existing) == 0
+
+	// Insert Screenplay
 	screenplay, err := qtx.CreateScreenplay(ctx, generated.CreateScreenplayParams{
 		ProjectID:   uuidToPgtype(projectID),
 		Title:       title,
 		Description: description,
-		IsDefault:   false,
-		SortOrder:   1,
+		IsDefault:   isDefault,
+		SortOrder:   int32(len(existing) + 1),
 	})
 	if err != nil {
 		return nil, err
