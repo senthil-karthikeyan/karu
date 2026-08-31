@@ -564,3 +564,193 @@ func TestScreenplayKeyLifecycleAndIsolation(t *testing.T) {
 		t.Errorf("expected screenplay 2 key to remain intact, got %+v (err: %v)", stillExists2, err)
 	}
 }
+
+type mockProjectRepoForLegacy struct {
+	project   *generated.Project
+	key       *model.ProjectKeyResponse
+	projResp  *model.ProjectResponse
+	updateErr error
+}
+
+func (m *mockProjectRepoForLegacy) Create(ctx context.Context, userID uuid.UUID, req model.CreateProjectRequest) (*model.ProjectResponse, error) {
+	return m.projResp, nil
+}
+func (m *mockProjectRepoForLegacy) GetByID(ctx context.Context, id uuid.UUID) (*generated.Project, error) {
+	if m.project != nil && m.project.ID.Bytes == id {
+		return m.project, nil
+	}
+	return nil, model.ErrNotFound
+}
+func (m *mockProjectRepoForLegacy) GetByIDAndUserID(ctx context.Context, id, userID uuid.UUID) (*generated.Project, error) {
+	if m.project != nil && m.project.ID.Bytes == id && m.project.UserID.Bytes == userID {
+		return m.project, nil
+	}
+	return nil, model.ErrNotFound
+}
+func (m *mockProjectRepoForLegacy) ListByUserID(ctx context.Context, userID uuid.UUID) ([]model.ProjectResponse, error) {
+	return []model.ProjectResponse{*m.projResp}, nil
+}
+func (m *mockProjectRepoForLegacy) Update(ctx context.Context, id, userID uuid.UUID, req model.UpdateProjectRequest) (*model.ProjectResponse, error) {
+	return m.projResp, m.updateErr
+}
+func (m *mockProjectRepoForLegacy) UpdateContent(ctx context.Context, id, userID uuid.UUID, content string, pageCount, wordCount, sceneCount int32, lastEdited string) (*model.ProjectResponse, error) {
+	if m.project != nil {
+		m.project.ScreenplayContent = content
+	}
+	return m.projResp, m.updateErr
+}
+func (m *mockProjectRepoForLegacy) Delete(ctx context.Context, id, userID uuid.UUID) error {
+	return nil
+}
+func (m *mockProjectRepoForLegacy) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
+	if m.key != nil {
+		return m.key, nil
+	}
+	return nil, model.ErrNotFound
+}
+func (m *mockProjectRepoForLegacy) UpsertProjectKey(ctx context.Context, projectID, userID uuid.UUID, wrappedKey, iv, algo string, ver int) (*model.ProjectKeyResponse, error) {
+	m.key = &model.ProjectKeyResponse{
+		ProjectID:  projectID,
+		UserID:     userID,
+		Version:    ver,
+		Algorithm:  algo,
+		IV:         iv,
+		WrappedKey: wrappedKey,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	return m.key, nil
+}
+func (m *mockProjectRepoForLegacy) DeleteProjectKey(ctx context.Context, projectID, userID uuid.UUID) error {
+	m.key = nil
+	return nil
+}
+
+type mockSceneRepoForLegacy struct{}
+func (m *mockSceneRepoForLegacy) Create(ctx context.Context, projectID uuid.UUID, req model.CreateSceneRequest) (*model.SceneItem, error) { return nil, nil }
+func (m *mockSceneRepoForLegacy) ListByProjectID(ctx context.Context, projectID uuid.UUID) ([]model.SceneItem, error) { return []model.SceneItem{}, nil }
+func (m *mockSceneRepoForLegacy) GetByID(ctx context.Context, id uuid.UUID) (*model.SceneItem, error) { return nil, nil }
+func (m *mockSceneRepoForLegacy) Update(ctx context.Context, id uuid.UUID, req model.UpdateSceneRequest) (*model.SceneItem, error) { return nil, nil }
+func (m *mockSceneRepoForLegacy) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mockSceneRepoForLegacy) DeleteByProjectID(ctx context.Context, projectID uuid.UUID) error { return nil }
+
+type mockActivityRepoForLegacy struct{}
+func (m *mockActivityRepoForLegacy) Create(ctx context.Context, projectID, userID uuid.UUID, actType, title, desc string, metadata map[string]interface{}) (*model.ActivityItem, error) { return nil, nil }
+func (m *mockActivityRepoForLegacy) ListByProjectID(ctx context.Context, projectID uuid.UUID) ([]model.ActivityItem, error) { return []model.ActivityItem{}, nil }
+
+func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	screenplayID := uuid.New()
+
+	valid12ByteIV := base64.StdEncoding.EncodeToString([]byte("123456789012"))
+	validWrappedKey := base64.StdEncoding.EncodeToString([]byte("wrapped-sck-legacy-32-bytes"))
+
+	defaultSp := &model.ScreenplayResponse{
+		ID:          screenplayID,
+		ProjectID:   projectID,
+		Title:       "Draft 1",
+		Description: "Default screenplay",
+		IsDefault:   true,
+		SortOrder:   1,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	contentStore := "<h2>INT. CANONICAL SCENE - DAY</h2>"
+	revisionStore := int64(3)
+
+	screenplayRepo := &mockScreenplayRepo{
+		getDefaultByProjectFunc: func(ctx context.Context, pid, uid uuid.UUID) (*model.ScreenplayResponse, error) {
+			if pid == projectID && uid == ownerID {
+				return defaultSp, nil
+			}
+			return nil, model.ErrNotFound
+		},
+		getContentFunc: func(ctx context.Context, sid uuid.UUID) (*model.ScreenplayContentResponse, error) {
+			if sid == screenplayID {
+				return &model.ScreenplayContentResponse{
+					ScreenplayID: sid,
+					Content:      contentStore,
+					Revision:     revisionStore,
+					IsEncrypted:  false,
+					UpdatedAt:    time.Now(),
+				}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+		saveContentFunc: func(ctx context.Context, sid uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error) {
+			contentStore = content
+			revisionStore = revision + 1
+			return &model.ScreenplayContentResponse{
+				ScreenplayID: sid,
+				Content:      content,
+				Revision:     revisionStore,
+				UpdatedAt:    time.Now(),
+			}, nil
+		},
+		getScreenplayKeyFunc: func(ctx context.Context, sid, uid uuid.UUID) (*model.ScreenplayKeyResponse, error) {
+			if sid == screenplayID && uid == ownerID {
+				return &model.ScreenplayKeyResponse{
+					ScreenplayID: sid,
+					Version:      1,
+					Algorithm:    "AES-GCM",
+					IV:           valid12ByteIV,
+					WrappedKey:   validWrappedKey,
+					CreatedAt:    time.Now(),
+					UpdatedAt:    time.Now(),
+				}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+
+	projRepo := &mockProjectRepoForLegacy{
+		project: &generated.Project{
+			ID:                pgtype.UUID{Bytes: projectID, Valid: true},
+			UserID:            pgtype.UUID{Bytes: ownerID, Valid: true},
+			Title:             "Legacy Compatible Project",
+			ScreenplayContent: "old-stale-content",
+			CreatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		},
+		projResp: &model.ProjectResponse{
+			ID:     projectID,
+			UserID: ownerID,
+			Title:  "Legacy Compatible Project",
+		},
+	}
+
+	projSvc := NewProjectService(projRepo, &mockSceneRepoForLegacy{}, &mockActivityRepoForLegacy{}, screenplayRepo)
+
+	// 1. Test GetProject populates ScreenplayContent from canonical default screenplay
+	projDetail, err := projSvc.GetProject(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("unexpected error fetching project: %v", err)
+	}
+	if projDetail.ScreenplayContent != "<h2>INT. CANONICAL SCENE - DAY</h2>" {
+		t.Errorf("expected ScreenplayContent from default screenplay, got: %s", projDetail.ScreenplayContent)
+	}
+
+	// 2. Test UpdateProject syncs content into canonical default screenplay
+	newContent := "<h2>INT. UPDATED SCENE - NIGHT</h2>"
+	_, err = projSvc.UpdateProject(ctx, projectID, ownerID, model.UpdateProjectRequest{
+		ScreenplayContent: &newContent,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error updating project: %v", err)
+	}
+	if contentStore != newContent || revisionStore != 4 {
+		t.Errorf("expected default screenplay to be updated to revision 4 with new content, got: revision=%d content=%v", revisionStore, contentStore)
+	}
+
+	// 3. Test GetProjectKey falls back to default screenplay key if project key is missing
+	keyResp, err := projSvc.GetProjectKey(ctx, projectID, ownerID)
+	if err != nil {
+		t.Fatalf("unexpected error resolving fallback project key: %v", err)
+	}
+	if keyResp.WrappedKey != validWrappedKey {
+		t.Errorf("expected fallback key %s, got %s", validWrappedKey, keyResp.WrappedKey)
+	}
+}

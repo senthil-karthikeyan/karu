@@ -39,7 +39,7 @@ func NewServer() (*http.Server, database.Service, error) {
 	// Services
 	authSvc := service.NewAuthService(userRepo, authIdentityRepo, refreshTokenRepo, tokenManager)
 	userSvc := service.NewUserService(userRepo, screenplayRepo)
-	projectSvc := service.NewProjectService(projectRepo, sceneRepo, activityRepo)
+	projectSvc := service.NewProjectService(projectRepo, sceneRepo, activityRepo, screenplayRepo)
 	screenplaySvc := service.NewScreenplayService(screenplayRepo, projectRepo)
 
 	// Handlers

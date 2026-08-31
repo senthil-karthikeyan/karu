@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
@@ -30,20 +31,23 @@ type ProjectService interface {
 }
 
 type projectService struct {
-	projectRepo  repository.ProjectRepository
-	sceneRepo    repository.SceneRepository
-	activityRepo repository.ActivityRepository
+	projectRepo    repository.ProjectRepository
+	sceneRepo      repository.SceneRepository
+	activityRepo   repository.ActivityRepository
+	screenplayRepo repository.ScreenplayRepository
 }
 
 func NewProjectService(
 	projectRepo repository.ProjectRepository,
 	sceneRepo repository.SceneRepository,
 	activityRepo repository.ActivityRepository,
+	screenplayRepo repository.ScreenplayRepository,
 ) ProjectService {
 	return &projectService{
-		projectRepo:  projectRepo,
-		sceneRepo:    sceneRepo,
-		activityRepo: activityRepo,
+		projectRepo:    projectRepo,
+		sceneRepo:      sceneRepo,
+		activityRepo:   activityRepo,
+		screenplayRepo: screenplayRepo,
 	}
 }
 
@@ -75,6 +79,11 @@ func (s *projectService) CreateProject(ctx context.Context, userID uuid.UUID, re
 		return nil, err
 	}
 
+	// Create canonical default screenplay
+	if s.screenplayRepo != nil {
+		_, _ = s.screenplayRepo.CreateScreenplay(ctx, project.ID, "Draft 1", "Default screenplay", "", nil, nil, userID)
+	}
+
 	// Create initial activity log
 	_, _ = s.activityRepo.Create(ctx, project.ID, userID, "created", "Project Created", "Created "+project.Title, map[string]interface{}{
 		"format": project.Format,
@@ -93,6 +102,31 @@ func (s *projectService) GetProject(ctx context.Context, id, userID uuid.UUID) (
 	scenes, err := s.sceneRepo.ListByProjectID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+
+	content := p.ScreenplayContent
+	if s.screenplayRepo != nil {
+		sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, id, userID)
+		if err == nil && sp != nil {
+			spContent, err := s.screenplayRepo.GetContent(ctx, sp.ID)
+			if err == nil && spContent != nil {
+				if spContent.IsEncrypted {
+					encPayload := model.EncryptedPayload{
+						Version:    spContent.EncryptionVersion,
+						Algorithm:  spContent.Algorithm,
+						IV:         spContent.IV,
+						Ciphertext: spContent.Ciphertext,
+					}
+					if jsonBytes, err := json.Marshal(encPayload); err == nil {
+						content = string(jsonBytes)
+					}
+				} else if spContent.Content != nil {
+					if str, ok := spContent.Content.(string); ok {
+						content = str
+					}
+				}
+			}
+		}
 	}
 
 	return &model.ProjectDetailResponse{
@@ -115,7 +149,7 @@ func (s *projectService) GetProject(ctx context.Context, id, userID uuid.UUID) (
 			CreatedAt: p.CreatedAt.Time,
 			UpdatedAt: p.UpdatedAt.Time,
 		},
-		ScreenplayContent: p.ScreenplayContent,
+		ScreenplayContent: content,
 		Scenes:            scenes,
 	}, nil
 }
@@ -157,6 +191,24 @@ func (s *projectService) UpdateProject(ctx context.Context, id, userID uuid.UUID
 		updatedProject, err = s.projectRepo.UpdateContent(ctx, id, userID, content, pageCount, wordCount, existing.SceneCount, lastEdited)
 		if err != nil {
 			return nil, err
+		}
+
+		// Sync to canonical default screenplay
+		if s.screenplayRepo != nil && req.ScreenplayContent != nil {
+			sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, id, userID)
+			if err == nil && sp != nil {
+				spContent, err := s.screenplayRepo.GetContent(ctx, sp.ID)
+				revision := int64(1)
+				if err == nil && spContent != nil {
+					revision = spContent.Revision
+				}
+				encPayload, isEnc := model.ParseEncryptedPayloadString(*req.ScreenplayContent)
+				if isEnc && encPayload != nil {
+					_, _ = s.screenplayRepo.SaveEncryptedContentWithRevision(ctx, sp.ID, *encPayload, revision)
+				} else {
+					_, _ = s.screenplayRepo.SaveContentWithRevision(ctx, sp.ID, *req.ScreenplayContent, revision)
+				}
+			}
 		}
 
 		_, _ = s.activityRepo.Create(ctx, id, userID, "edited", "Screenplay Edited", "Updated screenplay content", map[string]interface{}{
@@ -274,7 +326,32 @@ func (s *projectService) GetProjectKey(ctx context.Context, projectID, userID uu
 		return nil, err
 	}
 
-	return s.projectRepo.GetProjectKey(ctx, projectID, userID)
+	key, err := s.projectRepo.GetProjectKey(ctx, projectID, userID)
+	if err == nil && key != nil {
+		return key, nil
+	}
+
+	// Fallback to default screenplay key if project key is missing
+	if s.screenplayRepo != nil {
+		sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, projectID, userID)
+		if err == nil && sp != nil {
+			spKey, err := s.screenplayRepo.GetScreenplayKey(ctx, sp.ID, userID)
+			if err == nil && spKey != nil {
+				return &model.ProjectKeyResponse{
+					ProjectID:  projectID,
+					UserID:     userID,
+					Version:    spKey.Version,
+					Algorithm:  spKey.Algorithm,
+					IV:         spKey.IV,
+					WrappedKey: spKey.WrappedKey,
+					CreatedAt:  spKey.CreatedAt,
+					UpdatedAt:  spKey.UpdatedAt,
+				}, nil
+			}
+		}
+	}
+
+	return nil, model.ErrNotFound
 }
 
 func (s *projectService) SetProjectKey(ctx context.Context, projectID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ProjectKeyResponse, error) {
@@ -297,5 +374,18 @@ func (s *projectService) SetProjectKey(ctx context.Context, projectID, userID uu
 		version = model.ExpectedEncryptionVersion
 	}
 
-	return s.projectRepo.UpsertProjectKey(ctx, projectID, userID, req.WrappedKey, req.IV, algo, version)
+	resp, err := s.projectRepo.UpsertProjectKey(ctx, projectID, userID, req.WrappedKey, req.IV, algo, version)
+	if err != nil {
+		return nil, err
+	}
+
+	// Also sync to default screenplay key
+	if s.screenplayRepo != nil {
+		sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, projectID, userID)
+		if err == nil && sp != nil {
+			_, _ = s.screenplayRepo.UpsertScreenplayKey(ctx, sp.ID, userID, req.WrappedKey, req.IV, algo, version)
+		}
+	}
+
+	return resp, nil
 }

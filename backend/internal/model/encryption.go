@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -223,4 +224,20 @@ func ValidateUserEncryptionIdentityRequest(r UserEncryptionIdentityRequest) erro
 	}
 
 	return nil
+}
+
+// ParseEncryptedPayloadString attempts to deserialize a JSON string into an EncryptedPayload.
+// Returns the parsed payload and true if successful and valid, or nil and false otherwise.
+func ParseEncryptedPayloadString(s string) (*EncryptedPayload, bool) {
+	if s == "" {
+		return nil, false
+	}
+	var payload EncryptedPayload
+	if err := json.Unmarshal([]byte(s), &payload); err != nil {
+		return nil, false
+	}
+	if payload.Ciphertext == "" || payload.IV == "" {
+		return nil, false
+	}
+	return &payload, true
 }
