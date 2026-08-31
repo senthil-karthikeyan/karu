@@ -31,6 +31,7 @@ type ScreenplayRepository interface {
 	CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
 	GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	GetScreenplayWithOwnership(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
+	GetDefaultScreenplayByProject(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayResponse, error)
 	ListScreenplaysByProject(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
 	UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
 	DeleteScreenplay(ctx context.Context, id uuid.UUID) error
@@ -444,6 +445,22 @@ func (r *screenplayRepository) GetScreenplayWithOwnership(ctx context.Context, i
 		return nil, err
 	}
 	return &row, nil
+}
+
+func (r *screenplayRepository) GetDefaultScreenplayByProject(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayResponse, error) {
+	row, err := r.queries.GetDefaultScreenplayByProjectID(ctx, generated.GetDefaultScreenplayByProjectIDParams{
+		ProjectID: uuidToPgtype(projectID),
+		UserID:    uuidToPgtype(userID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	resp := toScreenplayResponse(row.ID, row.ProjectID, row.Title, row.Description, row.IsDefault, row.SortOrder, row.CreatedAt, row.UpdatedAt)
+	return &resp, nil
 }
 
 func (r *screenplayRepository) ListScreenplaysByProject(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error) {

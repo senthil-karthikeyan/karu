@@ -127,8 +127,9 @@ type mockScreenplayRepo struct {
 
 	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
 	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
-	getOwnershipFunc     func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
-	listByProjectFunc    func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
+	getOwnershipFunc          func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
+	getDefaultByProjectFunc   func(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayResponse, error)
+	listByProjectFunc         func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
 	updateScreenplayFunc func(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
 	deleteScreenplayFunc func(ctx context.Context, id uuid.UUID) error
 
@@ -237,6 +238,13 @@ func (m *mockScreenplayRepo) GetScreenplayWithOwnership(ctx context.Context, id,
 		ProjectID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
 		UserID:    pgtype.UUID{Bytes: userID, Valid: true},
 	}, nil
+}
+
+func (m *mockScreenplayRepo) GetDefaultScreenplayByProject(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayResponse, error) {
+	if m.getDefaultByProjectFunc != nil {
+		return m.getDefaultByProjectFunc(ctx, projectID, userID)
+	}
+	return nil, model.ErrNotFound
 }
 
 func (m *mockScreenplayRepo) ListScreenplaysByProject(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error) {

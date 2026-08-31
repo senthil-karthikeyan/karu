@@ -163,10 +163,10 @@ func (m *mockProjectService) SetProjectKey(ctx context.Context, projectID, userI
 type mockScreenplayService struct {
 	createScreenplayFunc func(ctx context.Context, projectID, userID uuid.UUID, req model.CreateScreenplayRequest) (*model.ScreenplayDetailResponse, error)
 	getScreenplayFunc    func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
+	getDefaultScreenplayFunc func(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
 	listScreenplaysFunc  func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
 	updateScreenplayFunc func(ctx context.Context, screenplayID, userID uuid.UUID, req model.UpdateScreenplayRequest) (*model.ScreenplayResponse, error)
 	deleteScreenplayFunc func(ctx context.Context, screenplayID, userID uuid.UUID) error
-
 	getContentFunc     func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayContentResponse, error)
 	saveContentFunc    func(ctx context.Context, screenplayID, userID uuid.UUID, req model.SaveContentRequest) (*model.ScreenplayContentResponse, error)
 	getScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
@@ -186,6 +186,12 @@ func (m *mockScreenplayService) CreateScreenplay(ctx context.Context, projectID,
 func (m *mockScreenplayService) GetScreenplay(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
 	if m.getScreenplayFunc != nil {
 		return m.getScreenplayFunc(ctx, screenplayID, userID)
+	}
+	return nil, nil
+}
+func (m *mockScreenplayService) GetProjectDefaultScreenplay(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
+	if m.getDefaultScreenplayFunc != nil {
+		return m.getDefaultScreenplayFunc(ctx, projectID, userID)
 	}
 	return nil, nil
 }

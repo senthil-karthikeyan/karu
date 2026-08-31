@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 type ScreenplayService interface {
 	CreateScreenplay(ctx context.Context, projectID, userID uuid.UUID, req model.CreateScreenplayRequest) (*model.ScreenplayDetailResponse, error)
 	GetScreenplay(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
+	GetProjectDefaultScreenplay(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
 	ListScreenplays(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
 	UpdateScreenplay(ctx context.Context, screenplayID, userID uuid.UUID, req model.UpdateScreenplayRequest) (*model.ScreenplayResponse, error)
 	DeleteScreenplay(ctx context.Context, screenplayID, userID uuid.UUID) error
@@ -101,6 +103,52 @@ func (s *screenplayService) GetScreenplay(ctx context.Context, screenplayID, use
 		Algorithm:         content.Algorithm,
 		IV:                content.IV,
 		Ciphertext:        content.Ciphertext,
+	}, nil
+}
+
+func (s *screenplayService) GetProjectDefaultScreenplay(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
+	proj, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	screenplay, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, projectID, userID)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			// Auto-create default screenplay for this project
+			initialContent := `<h2 data-type="scene-heading">1. INT. OPENING SCENE - DAY</h2><p data-type="action">Write your opening action here...</p>`
+			created, err := s.screenplayRepo.CreateScreenplay(
+				ctx,
+				projectID,
+				proj.Title,
+				proj.Logline,
+				initialContent,
+				nil,
+				nil,
+				userID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return created, nil
+		}
+		return nil, err
+	}
+
+	content, err := s.screenplayRepo.GetContent(ctx, screenplay.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.ScreenplayDetailResponse{
+		ScreenplayResponse: *screenplay,
+		Content:            content.Content,
+		Revision:           content.Revision,
+		IsEncrypted:        content.IsEncrypted,
+		EncryptionVersion:  content.EncryptionVersion,
+		Algorithm:          content.Algorithm,
+		IV:                 content.IV,
+		Ciphertext:         content.Ciphertext,
 	}, nil
 }
 

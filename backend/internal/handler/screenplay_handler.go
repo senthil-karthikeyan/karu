@@ -48,6 +48,33 @@ func (h *ScreenplayHandler) ListScreenplays(c *gin.Context) {
 	model.SendSuccess(c, http.StatusOK, screenplays)
 }
 
+// GetProjectDefaultScreenplay gets or auto-creates the default screenplay for a project.
+func (h *ScreenplayHandler) GetProjectDefaultScreenplay(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	param := c.Param("projectId")
+	if param == "" {
+		param = c.Param("id")
+	}
+	projectID, err := uuid.Parse(param)
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	screenplay, err := h.screenplayService.GetProjectDefaultScreenplay(c.Request.Context(), projectID, userID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, screenplay)
+}
+
 // CreateScreenplay creates a new screenplay inside a project.
 func (h *ScreenplayHandler) CreateScreenplay(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)

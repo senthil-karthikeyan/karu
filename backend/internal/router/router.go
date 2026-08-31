@@ -104,6 +104,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 
 				// Nested Screenplay endpoints
 				if deps.ScreenplayHandler != nil {
+					projects.GET("/:id/screenplay", deps.ScreenplayHandler.GetProjectDefaultScreenplay)
 					projects.GET("/:id/screenplays", deps.ScreenplayHandler.ListScreenplays)
 					projects.POST("/:id/screenplays", deps.ScreenplayHandler.CreateScreenplay)
 				}
