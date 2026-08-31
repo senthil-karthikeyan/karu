@@ -101,18 +101,23 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   }, [currentHtml, project.scenes]);
 
   // Determine initial editor content (plaintext or decrypted JSON)
+  const isEncryptedPayload = useMemo(() => {
+    return !!parseEncryptedPayloadString(project.screenplayContent);
+  }, [project.screenplayContent]);
+
   const initialContent = useMemo(() => {
     const parsedPayload = parseEncryptedPayloadString(project.screenplayContent);
     if (!parsedPayload) {
       return project.screenplayContent;
     }
-    // If encrypted and not yet decrypted, placeholder until key is provided
-    return `<p>🔒 Encrypted content. Please unlock with your passphrase.</p>`;
+    // If encrypted and not yet decrypted, show locked placeholder until unlocked
+    return `<p data-type="action">🔒 Encrypted screenplay draft. Please unlock your encryption session to view and write.</p>`;
   }, [project.screenplayContent]);
 
   // Initialize TipTap editor with screenplay extensions and pagination
   const editor = useEditor({
     immediatelyRender: false,
+    editable: !isEncryptedPayload || (isUnlocked && !!screenplayKey),
     extensions: [
       StarterKit.configure({
         paragraph: false,
@@ -141,6 +146,11 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
+      // If locked/encrypted placeholder is active, do not trigger autosave
+      if (isEncryptedPayload && !screenplayKey) {
+        return;
+      }
+
       setSaveStatus("saving");
 
       const html = currentEditor.getHTML();
@@ -223,7 +233,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     }
   }, [isUnlocked, screenplayKey, project.id]);
 
-  // Decrypt content when key becomes available in memory
+  // Decrypt content when key becomes available in memory and unlock editor
   useEffect(() => {
     if (!editor || !screenplayKey) return;
 
@@ -232,10 +242,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       decryptScreenplayContent(parsedPayload, screenplayKey)
         .then((doc) => {
           editor.commands.setContent(doc);
+          editor.setEditable(true);
         })
         .catch((err) => {
           console.error("Failed to decrypt initial content:", err);
         });
+    } else {
+      editor.setEditable(true);
     }
   }, [editor, screenplayKey, project.screenplayContent]);
 
@@ -261,18 +274,39 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     [editor]
   );
 
-  // Jump to scene in editor
+  // Jump to scene in editor via accurate ProseMirror document AST search
   const handleSelectScene = (scene: SceneItem) => {
     setActiveSceneId(scene.id);
     if (!editor) return;
 
-    const content = editor.getText();
-    const cleanSearch = scene.slugline.toUpperCase();
-    const index = content.toUpperCase().indexOf(cleanSearch);
+    const targetSlugline = scene.slugline.trim().toUpperCase();
+    let targetPos: number | null = null;
+    let targetLength = targetSlugline.length;
 
-    if (index !== -1) {
-      editor.commands.setTextSelection({ from: index + 1, to: index + 1 + cleanSearch.length });
-      editor.commands.scrollIntoView();
+    editor.state.doc.descendants((node, pos) => {
+      if (targetPos !== null) return false;
+      const isHeading = node.type.name === "heading" || node.attrs?.dataType === "scene-heading";
+      if (isHeading) {
+        const nodeText = (node.textContent || "").trim().toUpperCase();
+        if (
+          nodeText === targetSlugline ||
+          nodeText.includes(targetSlugline) ||
+          targetSlugline.includes(nodeText)
+        ) {
+          targetPos = pos + 1;
+          targetLength = node.textContent?.length || targetLength;
+          return false;
+        }
+      }
+    });
+
+    if (targetPos !== null) {
+      editor
+        .chain()
+        .focus()
+        .setTextSelection({ from: targetPos, to: targetPos + targetLength })
+        .scrollIntoView()
+        .run();
     }
   };
 

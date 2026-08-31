@@ -315,6 +315,22 @@ export function ScreenplayToolbar({ editor, onSetElementType }: ScreenplayToolba
               placeholder="Find in screenplay..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (e.shiftKey) {
+                    prevMatch();
+                  } else {
+                    nextMatch();
+                  }
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSearchOpen(false);
+                  setSearchQuery("");
+                  setTotalMatches(0);
+                  editor.commands.focus();
+                }
+              }}
               className="h-7 text-xs bg-transparent border-0 focus-visible:ring-0 px-0"
             />
           </div>
