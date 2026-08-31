@@ -163,3 +163,63 @@ export function tipTapJsonToHtml(doc: TipTapDocumentJSON): string {
     })
     .join("\n");
 }
+
+/**
+ * Converts a screenplay HTML string into a structured TipTap document JSON object.
+ */
+export function htmlToTipTapJson(html: string): TipTapDocumentJSON {
+  if (typeof window === "undefined" || !html || !html.trim()) {
+    return {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { dataType: "action" },
+          content: [{ type: "text", text: "" }],
+        },
+      ],
+    };
+  }
+
+  const parser = new DOMParser();
+  const parsedDoc = parser.parseFromString(html, "text/html");
+  const children = Array.from(parsedDoc.body.children);
+
+  if (children.length === 0) {
+    return {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { dataType: "action" },
+          content: [{ type: "text", text: html }],
+        },
+      ],
+    };
+  }
+
+  const nodes = children.map((el) => {
+    const text = el.textContent || "";
+    const dataType =
+      el.getAttribute("data-type") || (el.tagName === "H2" ? "scene-heading" : "action");
+
+    if (el.tagName === "H2") {
+      return {
+        type: "heading",
+        attrs: { level: 2, dataType: "scene-heading" },
+        content: text ? [{ type: "text", text }] : [],
+      };
+    }
+
+    return {
+      type: "paragraph",
+      attrs: { dataType },
+      content: text ? [{ type: "text", text }] : [],
+    };
+  });
+
+  return {
+    type: "doc",
+    content: nodes.length > 0 ? nodes : [{ type: "paragraph", attrs: { dataType: "action" }, content: [] }],
+  };
+}

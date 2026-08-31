@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
+import { LegacyMigrationCard } from "@/components/crypto/legacy-migration-card";
 import { generateEmergencyRecoveryKey, downloadRecoveryKit } from "@/lib/crypto/recovery";
 import { MainNav } from "@/components/navigation/main-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -373,6 +374,9 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Legacy Workspace E2EE Migration Panel */}
+        <LegacyMigrationCard />
 
         {/* Account Password Section */}
         <form onSubmit={handleUpdatePassword}>
