@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import {
-  ShieldAlert,
   Lock,
   Loader2,
-  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +47,6 @@ export function LegacyMigrationCard() {
 
     let successCount = 0;
     let failedCount = 0;
-    let skippedCount = 0;
 
     for (let i = 0; i < projects.length; i++) {
       const projSummary = projects[i];
@@ -62,7 +59,6 @@ export function LegacyMigrationCard() {
 
         // Check if already encrypted
         if (parseEncryptedPayloadString(content)) {
-          skippedCount++;
           setProgress(Math.round(((i + 1) / projects.length) * 100));
           continue;
         }

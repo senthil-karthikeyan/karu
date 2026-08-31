@@ -33,6 +33,7 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
+	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS(deps.Config.CORS))
 
 	// Root & Health Check Endpoints
