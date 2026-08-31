@@ -62,6 +62,8 @@ func New(cfg config.DatabaseConfig) (Service, error) {
 	}
 	poolConfig.HealthCheckPeriod = 1 * time.Minute
 
+	poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
 	timeout := cfg.ConnectTimeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
