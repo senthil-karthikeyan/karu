@@ -14,6 +14,7 @@ import { formatRelativeTime, formatDate } from "@/lib/date";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { EncryptionBadge } from "@/components/crypto/encryption-badge";
 
 interface ProjectOverviewProps {
   project: Project;
@@ -45,6 +46,7 @@ export function ProjectOverview({
             <Badge variant="outline" className="text-xs">
               {project.format}
             </Badge>
+            <EncryptionBadge screenplayId={project.id} />
             <span className="text-xs text-muted-foreground ml-1">
               Updated {formatRelativeTime(project.updatedAt)}
             </span>

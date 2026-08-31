@@ -139,3 +139,27 @@ export async function decryptScreenplayContent(
 
   return parsed as TipTapDocumentJSON;
 }
+
+/**
+ * Converts a TipTap document JSON structure back into screenplay HTML.
+ */
+export function tipTapJsonToHtml(doc: TipTapDocumentJSON): string {
+  if (!doc || !doc.content || !Array.isArray(doc.content)) {
+    return "";
+  }
+
+  return doc.content
+    .map((node) => {
+      const text = (node.content || [])
+        .map((c) => c.text || "")
+        .join("");
+
+      const dataType = (node.attrs?.dataType as string) || "action";
+      if (node.type === "heading") {
+        const level = node.attrs?.level || 2;
+        return `<h${level} data-type="${dataType}">${text}</h${level}>`;
+      }
+      return `<p data-type="${dataType}">${text}</p>`;
+    })
+    .join("\n");
+}
