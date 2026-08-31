@@ -37,6 +37,7 @@ import {
   base64ToUint8Array,
   stringToUtf8Bytes,
   utf8BytesToString,
+  normalizeScreenplayDoc,
   type TipTapDocumentJSON,
 } from "../index";
 
@@ -461,6 +462,99 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
 
     if (JSON.stringify(decrypted) !== JSON.stringify(semanticDoc)) {
       throw new Error("Semantic screenplay document roundtrip mismatch!");
+    }
+  });
+
+  // 14. Backward Compatibility: Normalize legacy AST to semantic nodes
+  await test("Backward Compatibility: Normalize legacy Heading & Paragraph AST to Semantic Nodes", async () => {
+    const legacyDoc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 2, dataType: "scene-heading" },
+          content: [{ type: "text", text: "INT. COFFEE SHOP - DAY" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "action" },
+          content: [{ type: "text", text: "A barista steams milk in the background." }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "character" },
+          content: [{ type: "text", text: "SARAH" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "dialogue" },
+          content: [{ type: "text", text: "I'll take an oat milk latte, please." }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "parenthetical" },
+          content: [{ type: "text", text: "(checking her phone)" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "transition" },
+          content: [{ type: "text", text: "FADE OUT." }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "shot" },
+          content: [{ type: "text", text: "CLOSE ON ESPRESSO MACHINE" }],
+        },
+      ],
+    };
+
+    const normalized = normalizeScreenplayDoc(legacyDoc);
+    const types = (normalized.content || []).map((n) => n.type);
+
+    const expectedTypes = [
+      "sceneHeading",
+      "action",
+      "character",
+      "dialogue",
+      "parenthetical",
+      "transition",
+      "shot",
+    ];
+
+    if (JSON.stringify(types) !== JSON.stringify(expectedTypes)) {
+      throw new Error(`Normalization type mismatch: expected ${JSON.stringify(expectedTypes)}, got ${JSON.stringify(types)}`);
+    }
+  });
+
+  // 15. Backward Compatibility: Encrypt legacy AST, decrypt, and normalize without loss
+  await test("Backward Compatibility: Full E2EE encrypt, decrypt, and AST migration roundtrip", async () => {
+    const sck = await generateScreenplayContentKey();
+
+    const legacyDoc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { dataType: "scene-heading" },
+          content: [{ type: "text", text: "EXT. DESERT - DAWN" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { dataType: "action" },
+          content: [{ type: "text", text: "The sun rises over the dunes." }],
+        },
+      ],
+    };
+
+    const encrypted = await encryptScreenplayContent(legacyDoc, sck);
+    const decrypted = await decryptScreenplayContent(encrypted, sck);
+    const normalized = normalizeScreenplayDoc(decrypted);
+
+    if (normalized.content?.[0].type !== "sceneHeading" || normalized.content?.[1].type !== "action") {
+      throw new Error("Normalized decrypted node types incorrect!");
+    }
+    if (normalized.content?.[0].content?.[0].text !== "EXT. DESERT - DAWN") {
+      throw new Error("Normalized text content corrupted!");
     }
   });
 

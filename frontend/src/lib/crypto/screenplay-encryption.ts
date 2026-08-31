@@ -251,3 +251,52 @@ export function htmlToTipTapJson(html: string): TipTapDocumentJSON {
       nodes.length > 0 ? nodes : [{ type: "action", attrs: { dataType: "action" }, content: [] }],
   };
 }
+
+/**
+ * Normalizes legacy TipTap JSON AST into semantic screenplay nodes
+ */
+export function normalizeScreenplayDoc(doc: TipTapDocumentJSON): TipTapDocumentJSON {
+  if (!doc || !doc.content || !Array.isArray(doc.content)) {
+    return {
+      type: "doc",
+      content: [{ type: "action", attrs: { dataType: "action" }, content: [{ type: "text", text: "" }] }],
+    };
+  }
+
+  const normalizedContent = doc.content.map((node) => {
+    let typeName = node.type;
+    const dataType =
+      (node.attrs?.dataType as string) ||
+      (node.attrs?.["data-type"] as string) ||
+      "";
+
+    if (typeName === "heading" || dataType === "scene-heading") {
+      typeName = "sceneHeading";
+    } else if (typeName === "paragraph") {
+      if (dataType === "character") typeName = "character";
+      else if (dataType === "dialogue") typeName = "dialogue";
+      else if (dataType === "parenthetical") typeName = "parenthetical";
+      else if (dataType === "transition") typeName = "transition";
+      else if (dataType === "shot") typeName = "shot";
+      else typeName = "action";
+    }
+
+    return {
+      ...node,
+      type: typeName,
+      attrs: {
+        ...node.attrs,
+        dataType:
+          typeName === "sceneHeading"
+            ? "scene-heading"
+            : typeName,
+      },
+    };
+  });
+
+  return {
+    ...doc,
+    type: "doc",
+    content: normalizedContent,
+  };
+}
