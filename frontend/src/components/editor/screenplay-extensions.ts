@@ -614,29 +614,68 @@ export function computePaginationDecorations(
   const decos: Decoration[] = [];
   let accumulatedHeight = 0;
   let currentPage = 1;
-  let pos = 0;
+
+  // Pre-calculate heights and positions for lookahead orphan prevention
+  const nodeHeights: number[] = [];
+  const nodePositions: number[] = [];
+  let scanPos = 0;
 
   for (let i = 0; i < doc.childCount; i++) {
     const child = doc.child(i);
-    const nodePos = pos;
+    nodePositions.push(scanPos);
 
-    let height = estimateBlockHeight(child);
-
+    let h = estimateBlockHeight(child);
     if (view && view.dom) {
       try {
-        const domNode = view.nodeDOM(nodePos) as HTMLElement | null;
+        const domNode = view.nodeDOM(scanPos) as HTMLElement | null;
         if (domNode && domNode.offsetHeight > 0) {
           const style = window.getComputedStyle(domNode);
           const mt = parseFloat(style.marginTop) || 0;
           const mb = parseFloat(style.marginBottom) || 0;
-          height = domNode.offsetHeight + mt + mb;
+          h = domNode.offsetHeight + mt + mb;
         }
       } catch {
-        // fallback to estimate
+        // fallback to standard estimation
+      }
+    }
+    nodeHeights.push(h);
+    scanPos += child.nodeSize;
+  }
+
+  for (let i = 0; i < doc.childCount; i++) {
+    const child = doc.child(i);
+    const nodePos = nodePositions[i];
+    const height = nodeHeights[i];
+    const type =
+      (child.attrs?.dataType as string) ||
+      (child.type.name === "sceneHeading" ? "scene-heading" : child.type.name);
+
+    // Lookahead for orphan prevention
+    const nextHeight = i + 1 < doc.childCount ? nodeHeights[i + 1] : 0;
+    let shouldForceBreakBefore = false;
+
+    if (accumulatedHeight > 0) {
+      // 1. Orphan Scene Heading: if scene heading + next block exceed page, push scene heading to new page
+      if (type === "scene-heading" || child.type.name === "sceneHeading") {
+        if (accumulatedHeight + height + Math.min(nextHeight, 40) > pageUsableHeight) {
+          shouldForceBreakBefore = true;
+        }
+      }
+      // 2. Orphan Character: if character cue + dialogue exceed page, push character to new page
+      else if (type === "character" || child.type.name === "character") {
+        if (accumulatedHeight + height + Math.min(nextHeight, 35) > pageUsableHeight) {
+          shouldForceBreakBefore = true;
+        }
+      }
+      // 3. Orphan Parenthetical: if parenthetical + dialogue exceed page, push to new page
+      else if (type === "parenthetical" || child.type.name === "parenthetical") {
+        if (accumulatedHeight + height + Math.min(nextHeight, 30) > pageUsableHeight) {
+          shouldForceBreakBefore = true;
+        }
       }
     }
 
-    if (accumulatedHeight + height > pageUsableHeight && accumulatedHeight > 0) {
+    if (shouldForceBreakBefore || (accumulatedHeight + height > pageUsableHeight && accumulatedHeight > 0)) {
       currentPage++;
       const pageNum = currentPage;
 
@@ -656,8 +695,6 @@ export function computePaginationDecorations(
     } else {
       accumulatedHeight += height;
     }
-
-    pos += child.nodeSize;
   }
 
   return {
