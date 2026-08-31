@@ -11,29 +11,62 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
+interface FormErrors {
+  email?: string;
+  password?: string;
+  server?: string;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated, isLoading } = useAuth({ redirectIfAuthenticated: true });
 
-  const [email, setEmail] = useState("arjun.dev@karustudio.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!email.trim()) {
+      newErrors.email = "Please enter your email address.";
+    } else if (!emailRegex.test(email.trim())) {
+      newErrors.email = "Please enter a valid email address.";
+    }
+
+    if (!password) {
+      newErrors.password = "Please enter your password.";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, server: undefined }));
 
     try {
-      const user = await login({ email, password });
+      const user = await login({ email: email.trim(), password });
       toast.success(`Welcome back, ${user.name || user.email}!`, {
         description: "Redirecting to your personal workspace...",
       });
       router.push("/dashboard");
     } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Invalid email or password";
+      setErrors((prev) => ({ ...prev, server: errorMsg }));
       toast.error("Login failed", {
-        description: err instanceof Error ? err.message : "Invalid email or password",
+        description: errorMsg,
       });
     } finally {
       setIsSubmitting(false);
@@ -110,20 +143,31 @@ export default function LoginPage() {
             </span>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          {errors.server && (
+            <div className="p-3 text-xs rounded-md bg-destructive/10 border border-destructive/20 text-destructive font-medium">
+              {errors.server}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} noValidate className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-xs font-semibold text-muted-foreground">
                 Email
               </Label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-10 text-sm"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                className={`h-10 text-sm ${errors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive font-medium mt-1">{errors.email}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -144,9 +188,11 @@ export default function LoginPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-10 text-sm pr-9"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
+                  className={`h-10 text-sm pr-9 ${errors.password ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
                 <button
                   type="button"
@@ -156,6 +202,9 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-xs text-destructive font-medium mt-1">{errors.password}</p>
+              )}
             </div>
 
             <div className="flex items-center space-x-2 pt-1">

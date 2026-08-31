@@ -7,7 +7,7 @@ INSERT INTO users (
     bio,
     preferences
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, sqlc.arg(preferences)::jsonb
 )
 RETURNING id, email, name, avatar_url, bio, preferences, created_at, updated_at;
 
@@ -27,7 +27,7 @@ SET
     name = COALESCE(NULLIF($2, ''), name),
     avatar_url = COALESCE(NULLIF($3, ''), avatar_url),
     bio = COALESCE(NULLIF($4, ''), bio),
-    preferences = COALESCE($5, preferences),
+    preferences = COALESCE(sqlc.arg(preferences)::jsonb, preferences),
     updated_at = NOW()
 WHERE id = $1
 RETURNING id, email, name, avatar_url, bio, preferences, created_at, updated_at;

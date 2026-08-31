@@ -72,6 +72,8 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 			{
 				users.GET("/me", deps.UserHandler.GetMe)
 				users.PATCH("/me", deps.UserHandler.UpdateMe)
+				users.GET("/me/encryption-metadata", deps.UserHandler.GetEncryptionMetadata)
+				users.POST("/me/encryption-metadata", deps.UserHandler.SetEncryptionMetadata)
 			}
 
 			// Project endpoints
@@ -106,6 +108,10 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 					screenplays.GET("/:id", deps.ScreenplayHandler.GetScreenplay)
 					screenplays.PATCH("/:id", deps.ScreenplayHandler.UpdateScreenplay)
 					screenplays.DELETE("/:id", deps.ScreenplayHandler.DeleteScreenplay)
+
+					// Screenplay Key Management (E2EE)
+					screenplays.GET("/:id/key", deps.ScreenplayHandler.GetScreenplayKey)
+					screenplays.POST("/:id/key", deps.ScreenplayHandler.SetScreenplayKey)
 
 					// Screenplay Content & Autosave
 					screenplays.GET("/:id/content", deps.ScreenplayHandler.GetContent)

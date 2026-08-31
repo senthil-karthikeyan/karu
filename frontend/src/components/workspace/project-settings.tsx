@@ -21,7 +21,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -273,14 +272,14 @@ export function ProjectSettings({ project }: ProjectSettingsProps) {
                   <AlertTriangle className="h-5 w-5" />
                   Delete &quot;{project.title}&quot;?
                 </DialogTitle>
-                <DialogDescription className="space-y-2 pt-2">
+                <div className="space-y-2 pt-2 text-sm text-muted-foreground">
                   <p>
                     This will permanently delete the project &quot;<strong>{project.title}</strong>&quot; and all screenplay scene content.
                   </p>
                   <p className="text-xs font-medium text-foreground">
                     To confirm, please type <strong className="text-destructive font-mono">DELETE</strong> below:
                   </p>
-                </DialogDescription>
+                </div>
               </DialogHeader>
 
               <div className="py-2">

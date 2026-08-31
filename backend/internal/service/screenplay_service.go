@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +21,9 @@ type ScreenplayService interface {
 
 	GetContent(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayContentResponse, error)
 	SaveContent(ctx context.Context, screenplayID, userID uuid.UUID, req model.SaveContentRequest) (*model.ScreenplayContentResponse, error)
+
+	GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
+	SetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error)
 
 	CreateVersion(ctx context.Context, screenplayID, userID uuid.UUID, req model.CreateVersionRequest) (*model.ScreenplayVersionResponse, error)
 	ListVersions(ctx context.Context, screenplayID, userID uuid.UUID) ([]model.ScreenplayVersionResponse, error)
@@ -53,8 +58,19 @@ func (s *screenplayService) CreateScreenplay(ctx context.Context, projectID, use
 		return nil, model.ErrBadRequest
 	}
 
+	if req.EncryptedPayload != nil {
+		if err := model.ValidateEncryptedPayload(*req.EncryptedPayload); err != nil {
+			return nil, fmt.Errorf("%w: %s", model.ErrInvalidEncryptedPayload, err.Error())
+		}
+	}
+	if req.WrappedKey != nil {
+		if err := model.ValidateWrappedKeyPayload(*req.WrappedKey); err != nil {
+			return nil, fmt.Errorf("%w: %s", model.ErrInvalidWrappedKey, err.Error())
+		}
+	}
+
 	initialContent := `<h2 data-type="scene-heading">1. INT. OPENING SCENE - DAY</h2><p data-type="action">Write your opening action here...</p>`
-	return s.screenplayRepo.CreateScreenplay(ctx, projectID, title, req.Description, initialContent)
+	return s.screenplayRepo.CreateScreenplay(ctx, projectID, title, req.Description, initialContent, req.EncryptedPayload, req.WrappedKey, userID)
 }
 
 func (s *screenplayService) GetScreenplay(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
@@ -78,8 +94,13 @@ func (s *screenplayService) GetScreenplay(ctx context.Context, screenplayID, use
 			CreatedAt:   row.CreatedAt.Time,
 			UpdatedAt:   row.UpdatedAt.Time,
 		},
-		Content:  content.Content,
-		Revision: content.Revision,
+		Content:           content.Content,
+		Revision:          content.Revision,
+		IsEncrypted:       content.IsEncrypted,
+		EncryptionVersion: content.EncryptionVersion,
+		Algorithm:         content.Algorithm,
+		IV:                content.IV,
+		Ciphertext:        content.Ciphertext,
 	}, nil
 }
 
@@ -134,8 +155,79 @@ func (s *screenplayService) SaveContent(ctx context.Context, screenplayID, userI
 		return nil, model.ErrBadRequest
 	}
 
-	// Update with optimistic concurrency check
-	return s.screenplayRepo.SaveContentWithRevision(ctx, screenplayID, req.Content, req.Revision)
+	// 1. Check if explicitly provided as EncryptedContent
+	if req.EncryptedContent != nil {
+		if err := model.ValidateEncryptedPayload(*req.EncryptedContent); err != nil {
+			return nil, fmt.Errorf("%w: %s", model.ErrInvalidEncryptedPayload, err.Error())
+		}
+		return s.screenplayRepo.SaveEncryptedContentWithRevision(ctx, screenplayID, *req.EncryptedContent, req.Revision)
+	}
+
+	// 2. Check if req.Content is provided
+	if len(req.Content) > 0 {
+		// Check if Content is an EncryptedPayload JSON object
+		var encPayload model.EncryptedPayload
+		if err := json.Unmarshal(req.Content, &encPayload); err == nil && encPayload.Version > 0 && encPayload.Algorithm != "" && encPayload.IV != "" && encPayload.Ciphertext != "" {
+			if err := model.ValidateEncryptedPayload(encPayload); err != nil {
+				return nil, fmt.Errorf("%w: %s", model.ErrInvalidEncryptedPayload, err.Error())
+			}
+			return s.screenplayRepo.SaveEncryptedContentWithRevision(ctx, screenplayID, encPayload, req.Revision)
+		}
+
+		// Check if Content is a stringified JSON string containing an EncryptedPayload
+		var strVal string
+		if err := json.Unmarshal(req.Content, &strVal); err == nil {
+			var nestedEnc model.EncryptedPayload
+			if err := json.Unmarshal([]byte(strVal), &nestedEnc); err == nil && nestedEnc.Version > 0 && nestedEnc.Algorithm != "" && nestedEnc.IV != "" && nestedEnc.Ciphertext != "" {
+				if err := model.ValidateEncryptedPayload(nestedEnc); err != nil {
+					return nil, fmt.Errorf("%w: %s", model.ErrInvalidEncryptedPayload, err.Error())
+				}
+				return s.screenplayRepo.SaveEncryptedContentWithRevision(ctx, screenplayID, nestedEnc, req.Revision)
+			}
+
+			// Plaintext string
+			return s.screenplayRepo.SaveContentWithRevision(ctx, screenplayID, strVal, req.Revision)
+		}
+
+		// Plaintext raw representation
+		return s.screenplayRepo.SaveContentWithRevision(ctx, screenplayID, string(req.Content), req.Revision)
+	}
+
+	return nil, fmt.Errorf("%w: content or encryptedContent must be provided", model.ErrBadRequest)
+}
+
+func (s *screenplayService) verifyOwnership(ctx context.Context, id, userID uuid.UUID) error {
+	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, id, userID)
+	if err == nil {
+		return nil
+	}
+	_, pErr := s.projectRepo.GetByIDAndUserID(ctx, id, userID)
+	if pErr == nil {
+		return nil
+	}
+	return err
+}
+
+func (s *screenplayService) GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
+	// Verify ownership against screenplay or project
+	if err := s.verifyOwnership(ctx, screenplayID, userID); err != nil {
+		return nil, err
+	}
+
+	return s.screenplayRepo.GetScreenplayKey(ctx, screenplayID, userID)
+}
+
+func (s *screenplayService) SetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error) {
+	// Verify ownership against screenplay or project
+	if err := s.verifyOwnership(ctx, screenplayID, userID); err != nil {
+		return nil, err
+	}
+
+	if err := model.ValidateWrappedKeyPayload(req); err != nil {
+		return nil, fmt.Errorf("%w: %s", model.ErrInvalidWrappedKey, err.Error())
+	}
+
+	return s.screenplayRepo.UpsertScreenplayKey(ctx, screenplayID, userID, req.WrappedKey, req.IV, req.Algorithm, req.Version)
 }
 
 func (s *screenplayService) CreateVersion(ctx context.Context, screenplayID, userID uuid.UUID, req model.CreateVersionRequest) (*model.ScreenplayVersionResponse, error) {
@@ -145,18 +237,48 @@ func (s *screenplayService) CreateVersion(ctx context.Context, screenplayID, use
 		return nil, err
 	}
 
-	content := ""
-	if req.Content != nil {
-		content = *req.Content
-	} else {
-		currContent, err := s.screenplayRepo.GetContent(ctx, screenplayID)
-		if err != nil {
-			return nil, err
+	// If explicit encrypted payload provided:
+	if req.EncryptedPayload != nil {
+		if err := model.ValidateEncryptedPayload(*req.EncryptedPayload); err != nil {
+			return nil, fmt.Errorf("%w: %s", model.ErrInvalidEncryptedPayload, err.Error())
 		}
-		content = currContent.Content
+		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", req.EncryptedPayload, &userID)
 	}
 
-	return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, content, userID)
+	// If explicit content string provided:
+	if req.Content != nil {
+		// Check if it's stringified JSON of EncryptedPayload
+		var nestedEnc model.EncryptedPayload
+		if err := json.Unmarshal([]byte(*req.Content), &nestedEnc); err == nil && nestedEnc.Version > 0 && nestedEnc.Algorithm != "" && nestedEnc.IV != "" && nestedEnc.Ciphertext != "" {
+			if err := model.ValidateEncryptedPayload(nestedEnc); err != nil {
+				return nil, fmt.Errorf("%w: %s", model.ErrInvalidEncryptedPayload, err.Error())
+			}
+			return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", &nestedEnc, &userID)
+		}
+		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, *req.Content, nil, &userID)
+	}
+
+	// Otherwise, snapshot current content
+	curr, err := s.screenplayRepo.GetContent(ctx, screenplayID)
+	if err != nil {
+		return nil, err
+	}
+
+	if curr.IsEncrypted {
+		enc := &model.EncryptedPayload{
+			Version:    curr.EncryptionVersion,
+			Algorithm:  curr.Algorithm,
+			IV:         curr.IV,
+			Ciphertext: curr.Ciphertext,
+		}
+		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", enc, &userID)
+	}
+
+	plainContent := ""
+	if str, ok := curr.Content.(string); ok {
+		plainContent = str
+	}
+	return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, plainContent, nil, &userID)
 }
 
 func (s *screenplayService) ListVersions(ctx context.Context, screenplayID, userID uuid.UUID) ([]model.ScreenplayVersionResponse, error) {

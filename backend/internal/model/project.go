@@ -13,16 +13,16 @@ type ProjectStats struct {
 }
 
 type SceneItem struct {
-	ID          uuid.UUID `json:"id"`
-	ProjectID   uuid.UUID `json:"projectId"`
-	Number      int       `json:"number"`
-	Slugline    string    `json:"slugline"`
-	Location    string    `json:"location"`
-	Time        string    `json:"time"`
-	Summary     string    `json:"summary,omitempty"`
-	PageNumber  int       `json:"pageNumber"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID         uuid.UUID `json:"id"`
+	ProjectID  uuid.UUID `json:"projectId"`
+	Number     int       `json:"number"`
+	Slugline   string    `json:"slugline"`
+	Location   string    `json:"location"`
+	Time       string    `json:"time"`
+	Summary    string    `json:"summary,omitempty"`
+	PageNumber int       `json:"pageNumber"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 type ActivityItem struct {

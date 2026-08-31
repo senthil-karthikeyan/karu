@@ -17,30 +17,60 @@ INSERT INTO screenplay_versions (
     version_number,
     title,
     content,
-    created_by
+    created_by,
+    is_encrypted,
+    encryption_version,
+    algorithm,
+    iv,
+    ciphertext
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, screenplay_id, version_number, title, content, created_by, created_at
+RETURNING id, screenplay_id, version_number, title, content, created_by, is_encrypted, encryption_version, algorithm, iv, ciphertext, created_at
 `
 
 type CreateScreenplayVersionParams struct {
-	ScreenplayID  pgtype.UUID `json:"screenplay_id"`
-	VersionNumber int32       `json:"version_number"`
-	Title         string      `json:"title"`
-	Content       string      `json:"content"`
-	CreatedBy     pgtype.UUID `json:"created_by"`
+	ScreenplayID      pgtype.UUID `json:"screenplay_id"`
+	VersionNumber     int32       `json:"version_number"`
+	Title             string      `json:"title"`
+	Content           string      `json:"content"`
+	CreatedBy         pgtype.UUID `json:"created_by"`
+	IsEncrypted       bool        `json:"is_encrypted"`
+	EncryptionVersion int32       `json:"encryption_version"`
+	Algorithm         string      `json:"algorithm"`
+	Iv                string      `json:"iv"`
+	Ciphertext        string      `json:"ciphertext"`
 }
 
-func (q *Queries) CreateScreenplayVersion(ctx context.Context, arg CreateScreenplayVersionParams) (ScreenplayVersion, error) {
+type CreateScreenplayVersionRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
+	VersionNumber     int32              `json:"version_number"`
+	Title             string             `json:"title"`
+	Content           string             `json:"content"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	IsEncrypted       bool               `json:"is_encrypted"`
+	EncryptionVersion int32              `json:"encryption_version"`
+	Algorithm         string             `json:"algorithm"`
+	Iv                string             `json:"iv"`
+	Ciphertext        string             `json:"ciphertext"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CreateScreenplayVersion(ctx context.Context, arg CreateScreenplayVersionParams) (CreateScreenplayVersionRow, error) {
 	row := q.db.QueryRow(ctx, createScreenplayVersion,
 		arg.ScreenplayID,
 		arg.VersionNumber,
 		arg.Title,
 		arg.Content,
 		arg.CreatedBy,
+		arg.IsEncrypted,
+		arg.EncryptionVersion,
+		arg.Algorithm,
+		arg.Iv,
+		arg.Ciphertext,
 	)
-	var i ScreenplayVersion
+	var i CreateScreenplayVersionRow
 	err := row.Scan(
 		&i.ID,
 		&i.ScreenplayID,
@@ -48,6 +78,11 @@ func (q *Queries) CreateScreenplayVersion(ctx context.Context, arg CreateScreenp
 		&i.Title,
 		&i.Content,
 		&i.CreatedBy,
+		&i.IsEncrypted,
+		&i.EncryptionVersion,
+		&i.Algorithm,
+		&i.Iv,
+		&i.Ciphertext,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -67,14 +102,29 @@ func (q *Queries) GetLatestVersionNumber(ctx context.Context, screenplayID pgtyp
 }
 
 const getScreenplayVersionByID = `-- name: GetScreenplayVersionByID :one
-SELECT id, screenplay_id, version_number, title, content, created_by, created_at
+SELECT id, screenplay_id, version_number, title, content, created_by, is_encrypted, encryption_version, algorithm, iv, ciphertext, created_at
 FROM screenplay_versions
 WHERE id = $1
 `
 
-func (q *Queries) GetScreenplayVersionByID(ctx context.Context, id pgtype.UUID) (ScreenplayVersion, error) {
+type GetScreenplayVersionByIDRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
+	VersionNumber     int32              `json:"version_number"`
+	Title             string             `json:"title"`
+	Content           string             `json:"content"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	IsEncrypted       bool               `json:"is_encrypted"`
+	EncryptionVersion int32              `json:"encryption_version"`
+	Algorithm         string             `json:"algorithm"`
+	Iv                string             `json:"iv"`
+	Ciphertext        string             `json:"ciphertext"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetScreenplayVersionByID(ctx context.Context, id pgtype.UUID) (GetScreenplayVersionByIDRow, error) {
 	row := q.db.QueryRow(ctx, getScreenplayVersionByID, id)
-	var i ScreenplayVersion
+	var i GetScreenplayVersionByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.ScreenplayID,
@@ -82,27 +132,47 @@ func (q *Queries) GetScreenplayVersionByID(ctx context.Context, id pgtype.UUID) 
 		&i.Title,
 		&i.Content,
 		&i.CreatedBy,
+		&i.IsEncrypted,
+		&i.EncryptionVersion,
+		&i.Algorithm,
+		&i.Iv,
+		&i.Ciphertext,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listScreenplayVersionsByScreenplayID = `-- name: ListScreenplayVersionsByScreenplayID :many
-SELECT id, screenplay_id, version_number, title, content, created_by, created_at
+SELECT id, screenplay_id, version_number, title, content, created_by, is_encrypted, encryption_version, algorithm, iv, ciphertext, created_at
 FROM screenplay_versions
 WHERE screenplay_id = $1
 ORDER BY version_number DESC
 `
 
-func (q *Queries) ListScreenplayVersionsByScreenplayID(ctx context.Context, screenplayID pgtype.UUID) ([]ScreenplayVersion, error) {
+type ListScreenplayVersionsByScreenplayIDRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
+	VersionNumber     int32              `json:"version_number"`
+	Title             string             `json:"title"`
+	Content           string             `json:"content"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	IsEncrypted       bool               `json:"is_encrypted"`
+	EncryptionVersion int32              `json:"encryption_version"`
+	Algorithm         string             `json:"algorithm"`
+	Iv                string             `json:"iv"`
+	Ciphertext        string             `json:"ciphertext"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListScreenplayVersionsByScreenplayID(ctx context.Context, screenplayID pgtype.UUID) ([]ListScreenplayVersionsByScreenplayIDRow, error) {
 	rows, err := q.db.Query(ctx, listScreenplayVersionsByScreenplayID, screenplayID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ScreenplayVersion
+	var items []ListScreenplayVersionsByScreenplayIDRow
 	for rows.Next() {
-		var i ScreenplayVersion
+		var i ListScreenplayVersionsByScreenplayIDRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ScreenplayID,
@@ -110,6 +180,11 @@ func (q *Queries) ListScreenplayVersionsByScreenplayID(ctx context.Context, scre
 			&i.Title,
 			&i.Content,
 			&i.CreatedBy,
+			&i.IsEncrypted,
+			&i.EncryptionVersion,
+			&i.Algorithm,
+			&i.Iv,
+			&i.Ciphertext,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

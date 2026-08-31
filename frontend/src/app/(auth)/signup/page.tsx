@@ -11,6 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
+interface FormErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+  agreed?: string;
+  server?: string;
+}
+
 export default function SignUpPage() {
   const router = useRouter();
   const { register, isAuthenticated, isLoading } = useAuth({ redirectIfAuthenticated: true });
@@ -20,37 +29,64 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!name.trim()) {
+      newErrors.name = "Please enter your full name.";
+    }
+
+    if (!email.trim()) {
+      newErrors.email = "Please enter your email address.";
+    } else if (!emailRegex.test(email.trim())) {
+      newErrors.email = "Please enter a valid email address.";
+    }
+
+    if (!password) {
+      newErrors.password = "Please enter a password.";
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters.";
+    }
+
+    if (!confirmPassword) {
+      newErrors.confirmPassword = "Please confirm your password.";
+    } else if (password !== confirmPassword) {
+      newErrors.confirmPassword = "Passwords do not match.";
+    }
+
+    if (!agreed) {
+      newErrors.agreed = "You must agree to the Terms of Service and Privacy Policy.";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      toast.error("Please enter your full name");
-      return;
-    }
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters long");
-      return;
-    }
-    if (!agreed) {
-      toast.error("Please agree to the Terms of Service & Privacy Policy");
+
+    if (!validateForm()) {
       return;
     }
 
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, server: undefined }));
+
     try {
-      const user = await register({ name, email, password });
+      const user = await register({ name: name.trim(), email: email.trim(), password });
       toast.success("Account created successfully!", {
         description: `Welcome to Karu, ${user.name || name}!`,
       });
       router.push("/dashboard");
     } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to create account";
+      setErrors((prev) => ({ ...prev, server: errorMsg }));
       toast.error("Sign up failed", {
-        description: err instanceof Error ? err.message : "Failed to create account",
+        description: errorMsg,
       });
     } finally {
       setIsSubmitting(false);
@@ -66,7 +102,6 @@ export default function SignUpPage() {
   if (isLoading || isAuthenticated) {
     return null;
   }
-
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-background">
@@ -125,7 +160,13 @@ export default function SignUpPage() {
             </span>
           </div>
 
-          <form onSubmit={handleSignUp} className="space-y-3.5">
+          {errors.server && (
+            <div className="p-3 text-xs rounded-md bg-destructive/10 border border-destructive/20 text-destructive font-medium">
+              {errors.server}
+            </div>
+          )}
+
+          <form onSubmit={handleSignUp} noValidate className="space-y-3.5">
             <div className="space-y-1">
               <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground">
                 Full Name
@@ -134,10 +175,15 @@ export default function SignUpPage() {
                 id="name"
                 placeholder="John Doe"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="h-9 text-sm"
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                className={`h-9 text-sm ${errors.name ? "border-destructive focus-visible:ring-destructive" : ""}`}
               />
+              {errors.name && (
+                <p className="text-xs text-destructive font-medium mt-1">{errors.name}</p>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -146,13 +192,18 @@ export default function SignUpPage() {
               </Label>
               <Input
                 id="email"
-                type="email"
+                type="text"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-9 text-sm"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                className={`h-9 text-sm ${errors.email ? "border-destructive focus-visible:ring-destructive" : ""}`}
               />
+              {errors.email && (
+                <p className="text-xs text-destructive font-medium mt-1">{errors.email}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -164,10 +215,15 @@ export default function SignUpPage() {
                   id="password"
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-9 text-sm"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
+                  className={`h-9 text-sm ${errors.password ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
+                {errors.password && (
+                  <p className="text-xs text-destructive font-medium mt-1">{errors.password}</p>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -178,23 +234,36 @@ export default function SignUpPage() {
                   id="confirm"
                   type="password"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="h-9 text-sm"
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (errors.confirmPassword) setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                  }}
+                  className={`h-9 text-sm ${errors.confirmPassword ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
+                {errors.confirmPassword && (
+                  <p className="text-xs text-destructive font-medium mt-1">{errors.confirmPassword}</p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-start space-x-2 pt-1">
-              <Checkbox
-                id="terms"
-                checked={agreed}
-                onCheckedChange={(checked) => setAgreed(!!checked)}
-                className="mt-0.5"
-              />
-              <Label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
-                I agree to the <span className="underline">Terms of Service</span> and <span className="underline">Privacy Policy</span>.
-              </Label>
+            <div className="space-y-1 pt-1">
+              <div className="flex items-start space-x-2">
+                <Checkbox
+                  id="terms"
+                  checked={agreed}
+                  onCheckedChange={(checked) => {
+                    setAgreed(!!checked);
+                    if (errors.agreed) setErrors((prev) => ({ ...prev, agreed: undefined }));
+                  }}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+                  I agree to the <span className="underline">Terms of Service</span> and <span className="underline">Privacy Policy</span>.
+                </Label>
+              </div>
+              {errors.agreed && (
+                <p className="text-xs text-destructive font-medium mt-1">{errors.agreed}</p>
+              )}
             </div>
 
             <Button type="submit" disabled={isSubmitting} className="w-full h-10 font-medium text-sm mt-2">

@@ -81,21 +81,43 @@ type Screenplay struct {
 }
 
 type ScreenplayContent struct {
+	ID                pgtype.UUID        `json:"id"`
+	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
+	Content           string             `json:"content"`
+	Revision          int64              `json:"revision"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	IsEncrypted       bool               `json:"is_encrypted"`
+	EncryptionVersion int32              `json:"encryption_version"`
+	Algorithm         string             `json:"algorithm"`
+	Iv                string             `json:"iv"`
+	Ciphertext        string             `json:"ciphertext"`
+}
+
+type ScreenplayKey struct {
 	ID           pgtype.UUID        `json:"id"`
 	ScreenplayID pgtype.UUID        `json:"screenplay_id"`
-	Content      string             `json:"content"`
-	Revision     int64              `json:"revision"`
+	UserID       pgtype.UUID        `json:"user_id"`
+	WrappedKey   string             `json:"wrapped_key"`
+	KeyIv        string             `json:"key_iv"`
+	Algorithm    string             `json:"algorithm"`
+	Version      int32              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ScreenplayVersion struct {
-	ID            pgtype.UUID        `json:"id"`
-	ScreenplayID  pgtype.UUID        `json:"screenplay_id"`
-	VersionNumber int32              `json:"version_number"`
-	Title         string             `json:"title"`
-	Content       string             `json:"content"`
-	CreatedBy     pgtype.UUID        `json:"created_by"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	ID                pgtype.UUID        `json:"id"`
+	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
+	VersionNumber     int32              `json:"version_number"`
+	Title             string             `json:"title"`
+	Content           string             `json:"content"`
+	CreatedBy         pgtype.UUID        `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	IsEncrypted       bool               `json:"is_encrypted"`
+	EncryptionVersion int32              `json:"encryption_version"`
+	Algorithm         string             `json:"algorithm"`
+	Iv                string             `json:"iv"`
+	Ciphertext        string             `json:"ciphertext"`
 }
 
 type User struct {
@@ -108,4 +130,13 @@ type User struct {
 	Preferences  []byte             `json:"preferences"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UserEncryptionMetadatum struct {
+	UserID        pgtype.UUID        `json:"user_id"`
+	Salt          string             `json:"salt"`
+	Iterations    int32              `json:"iterations"`
+	HashAlgorithm string             `json:"hash_algorithm"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }

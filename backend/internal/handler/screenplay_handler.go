@@ -207,6 +207,58 @@ func (h *ScreenplayHandler) SaveContent(c *gin.Context) {
 	model.SendSuccess(c, http.StatusOK, saved)
 }
 
+// GetScreenplayKey retrieves the authenticated user's wrapped SCK for a screenplay.
+func (h *ScreenplayHandler) GetScreenplayKey(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	screenplayID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	key, err := h.screenplayService.GetScreenplayKey(c.Request.Context(), screenplayID, userID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, key)
+}
+
+// SetScreenplayKey stores or updates the authenticated user's wrapped SCK for a screenplay.
+func (h *ScreenplayHandler) SetScreenplayKey(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	screenplayID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	var req model.WrappedKeyPayload
+	if err := c.ShouldBindJSON(&req); err != nil {
+		model.SendError(c, model.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusUnprocessableEntity, err))
+		return
+	}
+
+	key, err := h.screenplayService.SetScreenplayKey(c.Request.Context(), screenplayID, userID, req)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, key)
+}
+
 // ListVersions lists version checkpoints for a screenplay.
 func (h *ScreenplayHandler) ListVersions(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)

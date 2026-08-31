@@ -7,15 +7,22 @@ import (
 )
 
 var (
-	ErrNotFound           = errors.New("resource not found")
-	ErrUnauthorized       = errors.New("unauthorized")
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrForbidden          = errors.New("access forbidden")
-	ErrConflict           = errors.New("resource conflict")
-	ErrRevisionConflict   = errors.New("document revision conflict: client revision is outdated")
-	ErrEmailAlreadyExists = errors.New("email already registered")
-	ErrBadRequest         = errors.New("invalid request payload")
-	ErrInternal           = errors.New("internal server error")
+	ErrNotFound                       = errors.New("resource not found")
+	ErrUnauthorized                   = errors.New("unauthorized")
+	ErrInvalidCredentials             = errors.New("invalid email or password")
+	ErrForbidden                      = errors.New("access forbidden")
+	ErrConflict                       = errors.New("resource conflict")
+	ErrRevisionConflict               = errors.New("document revision conflict: client revision is outdated")
+	ErrEmailAlreadyExists             = errors.New("email already registered")
+	ErrBadRequest                     = errors.New("invalid request payload")
+	ErrInternal                       = errors.New("internal server error")
+	ErrEncryptionNotInitialized       = errors.New("encryption not initialized for user")
+	ErrInvalidEncryptedPayload        = errors.New("invalid encrypted payload")
+	ErrUnsupportedEncryptionVersion   = errors.New("unsupported encryption version")
+	ErrUnsupportedEncryptionAlgorithm = errors.New("unsupported encryption algorithm")
+	ErrInvalidEncryptionIV            = errors.New("invalid encryption IV")
+	ErrInvalidWrappedKey              = errors.New("invalid wrapped key")
+	ErrScreenplayKeyNotFound          = errors.New("screenplay key not found")
 )
 
 type AppError struct {
@@ -111,6 +118,55 @@ func MapErrorToAppError(err error) *AppError {
 			Code:       "BAD_REQUEST",
 			Message:    "Invalid request parameters or payload.",
 			StatusCode: http.StatusBadRequest,
+			Err:        err,
+		}
+	case errors.Is(err, ErrEncryptionNotInitialized):
+		return &AppError{
+			Code:       "ENCRYPTION_NOT_INITIALIZED",
+			Message:    "Encryption metadata has not been initialized for this user.",
+			StatusCode: http.StatusNotFound,
+			Err:        err,
+		}
+	case errors.Is(err, ErrScreenplayKeyNotFound):
+		return &AppError{
+			Code:       "SCREENPLAY_KEY_NOT_FOUND",
+			Message:    "No wrapped encryption key found for this screenplay.",
+			StatusCode: http.StatusNotFound,
+			Err:        err,
+		}
+	case errors.Is(err, ErrInvalidEncryptedPayload):
+		return &AppError{
+			Code:       "INVALID_ENCRYPTED_PAYLOAD",
+			Message:    "The provided encrypted payload is malformed or invalid.",
+			StatusCode: http.StatusUnprocessableEntity,
+			Err:        err,
+		}
+	case errors.Is(err, ErrUnsupportedEncryptionVersion):
+		return &AppError{
+			Code:       "UNSUPPORTED_ENCRYPTION_VERSION",
+			Message:    "The specified encryption version is not supported.",
+			StatusCode: http.StatusUnprocessableEntity,
+			Err:        err,
+		}
+	case errors.Is(err, ErrUnsupportedEncryptionAlgorithm):
+		return &AppError{
+			Code:       "UNSUPPORTED_ENCRYPTION_ALGORITHM",
+			Message:    "The specified encryption algorithm is not supported.",
+			StatusCode: http.StatusUnprocessableEntity,
+			Err:        err,
+		}
+	case errors.Is(err, ErrInvalidEncryptionIV):
+		return &AppError{
+			Code:       "INVALID_ENCRYPTION_IV",
+			Message:    "The provided encryption initialization vector (IV) is invalid.",
+			StatusCode: http.StatusUnprocessableEntity,
+			Err:        err,
+		}
+	case errors.Is(err, ErrInvalidWrappedKey):
+		return &AppError{
+			Code:       "INVALID_WRAPPED_KEY",
+			Message:    "The provided wrapped key payload is invalid.",
+			StatusCode: http.StatusUnprocessableEntity,
 			Err:        err,
 		}
 	default:

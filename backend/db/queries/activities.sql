@@ -7,7 +7,7 @@ INSERT INTO activities (
     description,
     metadata
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, sqlc.arg(metadata)::jsonb
 )
 RETURNING *;
 

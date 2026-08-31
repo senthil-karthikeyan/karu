@@ -36,6 +36,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	resp, err := h.authService.Register(c.Request.Context(), req)
 	if err != nil {
+		fmt.Printf("❌ [Register Error]: %v\n", err)
 		model.SendError(c, err)
 		return
 	}

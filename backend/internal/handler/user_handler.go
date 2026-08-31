@@ -28,7 +28,6 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	userID, err := middleware.GetUserID(c)
 	if err != nil {
 		log.Printf("[USERS ME] GetUserID error: %v", err)
-
 		model.SendError(c, model.ErrUnauthorized)
 		return
 	}
@@ -45,13 +44,11 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 			userID,
 			err,
 		)
-
 		model.SendError(c, err)
 		return
 	}
 
 	log.Printf("[USERS ME] success user_id=%s", userID)
-
 	model.SendSuccess(c, http.StatusOK, profile)
 }
 
@@ -76,4 +73,44 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	}
 
 	model.SendSuccess(c, http.StatusOK, updated)
+}
+
+// GetEncryptionMetadata returns the user's public salt and PBKDF2 parameters for deriving their UEK.
+func (h *UserHandler) GetEncryptionMetadata(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	metadata, err := h.userService.GetEncryptionMetadata(c.Request.Context(), userID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, metadata)
+}
+
+// SetEncryptionMetadata saves or updates the user's encryption salt and PBKDF2 configuration.
+func (h *UserHandler) SetEncryptionMetadata(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	var req model.UserEncryptionMetadataRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		model.SendError(c, model.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusUnprocessableEntity, err))
+		return
+	}
+
+	metadata, err := h.userService.SetEncryptionMetadata(c.Request.Context(), userID, req)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, metadata)
 }

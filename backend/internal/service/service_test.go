@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -118,63 +119,180 @@ func (m *mockRefreshTokenRepo) RevokeAllForUser(ctx context.Context, userID uuid
 }
 
 type mockScreenplayRepo struct {
-	createScreenplayFunc       func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string) (*model.ScreenplayDetailResponse, error)
-	getScreenplayFunc          func(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error)
-	getScreenplayOwnershipFunc func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
-	listScreenplaysFunc        func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
-	updateScreenplayFunc       func(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
-	deleteScreenplayFunc       func(ctx context.Context, id uuid.UUID) error
+	getUserMetadataFunc     func(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error)
+	upsertUserMetadataFunc  func(ctx context.Context, userID uuid.UUID, salt string, iterations int, hashAlgo string) (*model.UserEncryptionMetadataResponse, error)
+	getScreenplayKeyFunc    func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
+	upsertScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error)
+	deleteScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) error
 
-	getContentFunc          func(ctx context.Context, screenplayID uuid.UUID) (*model.ScreenplayContentResponse, error)
-	saveContentWithRevFunc  func(ctx context.Context, screenplayID uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error)
-	createVersionFunc       func(ctx context.Context, screenplayID uuid.UUID, title, content string, createdBy uuid.UUID) (*model.ScreenplayVersionResponse, error)
-	getLatestVersionNumFunc func(ctx context.Context, screenplayID uuid.UUID) (int, error)
-	listVersionsFunc        func(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayVersionResponse, error)
-	getVersionByIDFunc      func(ctx context.Context, versionID uuid.UUID) (*model.ScreenplayVersionResponse, error)
-	restoreVersionFunc      func(ctx context.Context, screenplayID, versionID, userID uuid.UUID) (*model.RestoreVersionResponse, error)
+	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
+	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error)
+	getOwnershipFunc     func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
+	listByProjectFunc    func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
+	updateScreenplayFunc func(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
+	deleteScreenplayFunc func(ctx context.Context, id uuid.UUID) error
+
+	getContentFunc       func(ctx context.Context, screenplayID uuid.UUID) (*model.ScreenplayContentResponse, error)
+	saveContentFunc      func(ctx context.Context, screenplayID uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error)
+	saveEncryptedContent func(ctx context.Context, screenplayID uuid.UUID, payload model.EncryptedPayload, revision int64) (*model.ScreenplayContentResponse, error)
+
+	createVersionFunc func(ctx context.Context, screenplayID uuid.UUID, title, content string, encPayload *model.EncryptedPayload, createdBy *uuid.UUID) (*model.ScreenplayVersionResponse, error)
+	getLatestVerFunc  func(ctx context.Context, screenplayID uuid.UUID) (int, error)
+	listVersionsFunc  func(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayVersionResponse, error)
+	getVersionFunc    func(ctx context.Context, versionID uuid.UUID) (*model.ScreenplayVersionResponse, error)
+	restoreVerFunc    func(ctx context.Context, screenplayID, versionID, userID uuid.UUID) (*model.RestoreVersionResponse, error)
 }
 
-func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string) (*model.ScreenplayDetailResponse, error) {
-	return m.createScreenplayFunc(ctx, projectID, title, description, initialContent)
+func (m *mockScreenplayRepo) GetUserEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error) {
+	if m.getUserMetadataFunc != nil {
+		return m.getUserMetadataFunc(ctx, userID)
+	}
+	return nil, model.ErrEncryptionNotInitialized
 }
+
+func (m *mockScreenplayRepo) UpsertUserEncryptionMetadata(ctx context.Context, userID uuid.UUID, salt string, iterations int, hashAlgo string) (*model.UserEncryptionMetadataResponse, error) {
+	if m.upsertUserMetadataFunc != nil {
+		return m.upsertUserMetadataFunc(ctx, userID, salt, iterations, hashAlgo)
+	}
+	return &model.UserEncryptionMetadataResponse{
+		UserID:        userID,
+		Salt:          salt,
+		Iterations:    iterations,
+		HashAlgorithm: hashAlgo,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
+	if m.getScreenplayKeyFunc != nil {
+		return m.getScreenplayKeyFunc(ctx, screenplayID, userID)
+	}
+	return nil, model.ErrScreenplayKeyNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error) {
+	if m.upsertScreenplayKeyFunc != nil {
+		return m.upsertScreenplayKeyFunc(ctx, screenplayID, userID, wrappedKey, keyIV, algorithm, version)
+	}
+	return &model.ScreenplayKeyResponse{
+		ScreenplayID: screenplayID,
+		Version:      version,
+		Algorithm:    algorithm,
+		IV:           keyIV,
+		WrappedKey:   wrappedKey,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) DeleteScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) error {
+	if m.deleteScreenplayKeyFunc != nil {
+		return m.deleteScreenplayKeyFunc(ctx, screenplayID, userID)
+	}
+	return nil
+}
+
+func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
+	if m.createScreenplayFunc != nil {
+		return m.createScreenplayFunc(ctx, projectID, title, description, initialContent, encPayload, wrappedKey, userID)
+	}
+	return nil, nil
+}
+
 func (m *mockScreenplayRepo) GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error) {
-	return m.getScreenplayFunc(ctx, id)
-}
-func (m *mockScreenplayRepo) GetScreenplayWithOwnership(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error) {
-	if m.getScreenplayOwnershipFunc != nil {
-		return m.getScreenplayOwnershipFunc(ctx, id, userID)
+	if m.getScreenplayFunc != nil {
+		return m.getScreenplayFunc(ctx, id)
 	}
 	return nil, model.ErrNotFound
 }
+
+func (m *mockScreenplayRepo) GetScreenplayWithOwnership(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error) {
+	if m.getOwnershipFunc != nil {
+		return m.getOwnershipFunc(ctx, id, userID)
+	}
+	return &generated.GetScreenplayByIDAndUserIDRow{
+		ID:        pgtype.UUID{Bytes: id, Valid: true},
+		ProjectID: pgtype.UUID{Bytes: uuid.New(), Valid: true},
+		UserID:    pgtype.UUID{Bytes: userID, Valid: true},
+	}, nil
+}
+
 func (m *mockScreenplayRepo) ListScreenplaysByProject(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error) {
-	return m.listScreenplaysFunc(ctx, projectID, userID)
+	if m.listByProjectFunc != nil {
+		return m.listByProjectFunc(ctx, projectID, userID)
+	}
+	return []model.ScreenplayResponse{}, nil
 }
+
 func (m *mockScreenplayRepo) UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error) {
-	return m.updateScreenplayFunc(ctx, id, title, description)
+	if m.updateScreenplayFunc != nil {
+		return m.updateScreenplayFunc(ctx, id, title, description)
+	}
+	return nil, nil
 }
+
 func (m *mockScreenplayRepo) DeleteScreenplay(ctx context.Context, id uuid.UUID) error {
-	return m.deleteScreenplayFunc(ctx, id)
+	if m.deleteScreenplayFunc != nil {
+		return m.deleteScreenplayFunc(ctx, id)
+	}
+	return nil
 }
+
 func (m *mockScreenplayRepo) GetContent(ctx context.Context, screenplayID uuid.UUID) (*model.ScreenplayContentResponse, error) {
-	return m.getContentFunc(ctx, screenplayID)
+	if m.getContentFunc != nil {
+		return m.getContentFunc(ctx, screenplayID)
+	}
+	return nil, model.ErrNotFound
 }
+
 func (m *mockScreenplayRepo) SaveContentWithRevision(ctx context.Context, screenplayID uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error) {
-	return m.saveContentWithRevFunc(ctx, screenplayID, content, revision)
+	if m.saveContentFunc != nil {
+		return m.saveContentFunc(ctx, screenplayID, content, revision)
+	}
+	return nil, nil
 }
-func (m *mockScreenplayRepo) CreateVersion(ctx context.Context, screenplayID uuid.UUID, title, content string, createdBy uuid.UUID) (*model.ScreenplayVersionResponse, error) {
-	return m.createVersionFunc(ctx, screenplayID, title, content, createdBy)
+
+func (m *mockScreenplayRepo) SaveEncryptedContentWithRevision(ctx context.Context, screenplayID uuid.UUID, payload model.EncryptedPayload, revision int64) (*model.ScreenplayContentResponse, error) {
+	if m.saveEncryptedContent != nil {
+		return m.saveEncryptedContent(ctx, screenplayID, payload, revision)
+	}
+	return nil, nil
 }
+
+func (m *mockScreenplayRepo) CreateVersion(ctx context.Context, screenplayID uuid.UUID, title, content string, encPayload *model.EncryptedPayload, createdBy *uuid.UUID) (*model.ScreenplayVersionResponse, error) {
+	if m.createVersionFunc != nil {
+		return m.createVersionFunc(ctx, screenplayID, title, content, encPayload, createdBy)
+	}
+	return nil, nil
+}
+
 func (m *mockScreenplayRepo) GetLatestVersionNumber(ctx context.Context, screenplayID uuid.UUID) (int, error) {
-	return m.getLatestVersionNumFunc(ctx, screenplayID)
+	if m.getLatestVerFunc != nil {
+		return m.getLatestVerFunc(ctx, screenplayID)
+	}
+	return 0, nil
 }
+
 func (m *mockScreenplayRepo) ListVersions(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayVersionResponse, error) {
-	return m.listVersionsFunc(ctx, screenplayID)
+	if m.listVersionsFunc != nil {
+		return m.listVersionsFunc(ctx, screenplayID)
+	}
+	return []model.ScreenplayVersionResponse{}, nil
 }
+
 func (m *mockScreenplayRepo) GetVersionByID(ctx context.Context, versionID uuid.UUID) (*model.ScreenplayVersionResponse, error) {
-	return m.getVersionByIDFunc(ctx, versionID)
+	if m.getVersionFunc != nil {
+		return m.getVersionFunc(ctx, versionID)
+	}
+	return nil, model.ErrNotFound
 }
+
 func (m *mockScreenplayRepo) RestoreVersion(ctx context.Context, screenplayID, versionID, userID uuid.UUID) (*model.RestoreVersionResponse, error) {
-	return m.restoreVersionFunc(ctx, screenplayID, versionID, userID)
+	if m.restoreVerFunc != nil {
+		return m.restoreVerFunc(ctx, screenplayID, versionID, userID)
+	}
+	return nil, nil
 }
 
 type mockProjectRepoForScreenplay struct {
@@ -405,7 +523,7 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 	}
 
 	screenplayRepo := &mockScreenplayRepo{
-		getScreenplayOwnershipFunc: func(ctx context.Context, id, uID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error) {
+		getOwnershipFunc: func(ctx context.Context, id, uID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error) {
 			if id == screenplayID && uID == userID {
 				return &generated.GetScreenplayByIDAndUserIDRow{
 					ID:        pgtype.UUID{Bytes: screenplayID, Valid: true},
@@ -422,7 +540,7 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 				Revision:     currentRevision,
 			}, nil
 		},
-		saveContentWithRevFunc: func(ctx context.Context, sID uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error) {
+		saveContentFunc: func(ctx context.Context, sID uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error) {
 			if revision != currentRevision {
 				return nil, model.ErrRevisionConflict
 			}
@@ -434,7 +552,7 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 				Revision:     currentRevision,
 			}, nil
 		},
-		createVersionFunc: func(ctx context.Context, sID uuid.UUID, title, content string, createdBy uuid.UUID) (*model.ScreenplayVersionResponse, error) {
+		createVersionFunc: func(ctx context.Context, sID uuid.UUID, title, content string, encPayload *model.EncryptedPayload, createdBy *uuid.UUID) (*model.ScreenplayVersionResponse, error) {
 			return &model.ScreenplayVersionResponse{
 				ID:            versionID,
 				ScreenplayID:  sID,
@@ -443,7 +561,7 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 				Content:       content,
 			}, nil
 		},
-		restoreVersionFunc: func(ctx context.Context, sID, vID, uID uuid.UUID) (*model.RestoreVersionResponse, error) {
+		restoreVerFunc: func(ctx context.Context, sID, vID, uID uuid.UUID) (*model.RestoreVersionResponse, error) {
 			return &model.RestoreVersionResponse{
 				ScreenplayID:   sID,
 				RestoredFromID: vID,
@@ -459,7 +577,7 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 
 	// 1. Successful autosave with correct revision
 	saved, err := screenplaySvc.SaveContent(ctx, screenplayID, userID, model.SaveContentRequest{
-		Content:  "Updated action in diner",
+		Content:  json.RawMessage(`"Updated action in diner"`),
 		Revision: 5,
 	})
 	if err != nil {
@@ -471,7 +589,7 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 
 	// 2. Conflict: client sends outdated revision
 	_, err = screenplaySvc.SaveContent(ctx, screenplayID, userID, model.SaveContentRequest{
-		Content:  "Stale overwrite attempt",
+		Content:  json.RawMessage(`"Stale overwrite attempt"`),
 		Revision: 5, // currently at 6
 	})
 	if err != model.ErrRevisionConflict {

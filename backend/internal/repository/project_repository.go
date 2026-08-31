@@ -156,14 +156,14 @@ func (r *projectRepository) Update(ctx context.Context, id, userID uuid.UUID, re
 	}
 
 	p, err := r.queries.UpdateProject(ctx, generated.UpdateProjectParams{
-		ID:      uuidToPgtype(id),
-		UserID:  uuidToPgtype(userID),
-		Column3: title,
-		Logline: logline,
-		Column5: genre,
-		Column6: format,
-		Column7: status,
-		Synopsis: synopsis,
+		ID:         uuidToPgtype(id),
+		UserID:     uuidToPgtype(userID),
+		Column3:    title,
+		Logline:    logline,
+		Column5:    genre,
+		Column6:    format,
+		Column7:    status,
+		Synopsis:   synopsis,
 		CoverImage: coverImage,
 	})
 	if err != nil {

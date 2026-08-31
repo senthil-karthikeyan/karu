@@ -20,7 +20,7 @@ INSERT INTO activities (
     description,
     metadata
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6::jsonb
 )
 RETURNING id, project_id, user_id, type, title, description, metadata, created_at
 `

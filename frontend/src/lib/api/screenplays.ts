@@ -1,4 +1,14 @@
 import { apiClient } from "./client";
+import type {
+  EncryptedPayload,
+  TipTapDocumentJSON,
+  WrappedKeyPayload,
+} from "@/lib/crypto";
+import {
+  encryptScreenplayContent,
+  decryptScreenplayContent,
+  parseEncryptedPayloadString,
+} from "@/lib/crypto";
 
 export interface ScreenplayResponse {
   id: string;
@@ -54,9 +64,19 @@ export interface SaveContentRequest {
   revision: number;
 }
 
+export interface SaveEncryptedContentRequest {
+  encryptedContent: EncryptedPayload;
+  revision: number;
+}
+
 export interface CreateVersionRequest {
   title: string;
   content?: string;
+}
+
+export interface EncryptedKeyMetadata {
+  screenplayId: string;
+  wrappedKey: WrappedKeyPayload;
 }
 
 export const screenplaysApi = {
@@ -109,6 +129,53 @@ export const screenplaysApi = {
     });
   },
 
+  /**
+   * Client-side E2EE: Encrypts the TipTap document JSON using the provided SCK
+   * and dispatches the ciphertext payload to the backend without exposing plaintext.
+   */
+  async saveEncryptedContent(
+    id: string,
+    doc: TipTapDocumentJSON,
+    key: CryptoKey,
+    revision: number
+  ): Promise<ScreenplayContentResponse> {
+    const encryptedPayload = await encryptScreenplayContent(doc, key);
+    return apiClient<ScreenplayContentResponse>(`/screenplays/${id}/content`, {
+      method: "PUT",
+      body: JSON.stringify({
+        content: JSON.stringify(encryptedPayload),
+        revision,
+      }),
+    });
+  },
+
+  /**
+   * Client-side E2EE: Fetches the encrypted payload from backend and decrypts
+   * into TipTap JSON using the provided SCK.
+   */
+  async getDecryptedContent(
+    id: string,
+    key: CryptoKey
+  ): Promise<{ doc: TipTapDocumentJSON; revision: number; updatedAt: string }> {
+    const resp = await this.getContent(id);
+    const parsedPayload = parseEncryptedPayloadString(resp.content);
+    if (parsedPayload) {
+      const doc = await decryptScreenplayContent(parsedPayload, key);
+      return { doc, revision: resp.revision, updatedAt: resp.updatedAt };
+    }
+
+    try {
+      const parsed = JSON.parse(resp.content);
+      if (parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).type === "doc") {
+        return { doc: parsed as TipTapDocumentJSON, revision: resp.revision, updatedAt: resp.updatedAt };
+      }
+    } catch {
+      // Plaintext or legacy format
+    }
+
+    throw new Error("Unable to decrypt screenplay: content format is unrecognized or corrupted.");
+  },
+
   async listVersions(id: string): Promise<ScreenplayVersionResponse[]> {
     const data = await apiClient<ScreenplayVersionResponse[]>(`/screenplays/${id}/versions`);
     return data || [];
@@ -135,5 +202,19 @@ export const screenplaysApi = {
         method: "POST",
       }
     );
+  },
+
+  async getScreenplayKey(id: string): Promise<WrappedKeyPayload> {
+    return apiClient<WrappedKeyPayload>(`/screenplays/${id}/key`);
+  },
+
+  async setScreenplayKey(
+    id: string,
+    data: WrappedKeyPayload
+  ): Promise<WrappedKeyPayload> {
+    return apiClient<WrappedKeyPayload>(`/screenplays/${id}/key`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
   },
 };

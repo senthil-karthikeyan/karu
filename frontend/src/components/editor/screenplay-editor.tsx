@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -10,13 +10,21 @@ import {
   ArrowLeft,
   CheckCircle2,
   CloudUpload,
-  Eye,
   Download,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
 import type { Project, SceneItem } from "@/types/screenplay";
 import { useUpdateProjectMutation } from "@/hooks/use-projects";
+import { useEncryptionStore } from "@/stores/encryption-store";
+import {
+  parseEncryptedPayloadString,
+  encryptScreenplayContent,
+  decryptScreenplayContent,
+  type TipTapDocumentJSON,
+} from "@/lib/crypto";
+import { EncryptionBadge } from "@/components/crypto/encryption-badge";
+import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
 import { ScreenplayToolbar } from "./screenplay-toolbar";
 import { SceneNavigator } from "./scene-navigator";
 import { ExportModal } from "./export-modal";
@@ -27,7 +35,6 @@ import {
   ScreenplayPagination,
 } from "./screenplay-extensions";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/date";
 
 interface ScreenplayEditorProps {
@@ -74,11 +81,17 @@ function extractScenesFromHtml(html: string, fallbackScenes: SceneItem[]): Scene
 
 export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const updateProjectMutation = useUpdateProjectMutation(project.id);
+  const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
+  const screenplayKey = useEncryptionStore((state) => state.screenplayKeys[project.id]);
+  const createAndWrapScreenplayKey = useEncryptionStore(
+    (state) => state.createAndWrapScreenplayKey
+  );
 
   const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
   const [lastSaved, setLastSaved] = useState<Date>(new Date(project.updatedAt));
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [currentHtml, setCurrentHtml] = useState<string>(project.screenplayContent);
   const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes[0]?.id);
 
@@ -89,6 +102,16 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const dynamicScenes = useMemo(() => {
     return extractScenesFromHtml(currentHtml, project.scenes);
   }, [currentHtml, project.scenes]);
+
+  // Determine initial editor content (plaintext or decrypted JSON)
+  const initialContent = useMemo(() => {
+    const parsedPayload = parseEncryptedPayloadString(project.screenplayContent);
+    if (!parsedPayload) {
+      return project.screenplayContent;
+    }
+    // If encrypted and not yet decrypted, placeholder until key is provided
+    return `<p>🔒 Encrypted content. Please unlock with your passphrase.</p>`;
+  }, [project.screenplayContent]);
 
   // Initialize TipTap editor with screenplay extensions and pagination
   const editor = useEditor({
@@ -113,7 +136,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         placeholder: "Write scene heading (e.g. INT. TRAIN COMPARTMENT - NIGHT)...",
       }),
     ],
-    content: project.screenplayContent,
+    content: initialContent,
     editorProps: {
       attributes: {
         class:
@@ -124,6 +147,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       setSaveStatus("saving");
 
       const html = currentEditor.getHTML();
+      const json = currentEditor.getJSON() as TipTapDocumentJSON;
       const text = currentEditor.getText();
       setCurrentHtml(html);
 
@@ -138,7 +162,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         sceneCount: scenesCount,
       }));
 
-      // Debounced auto-save to real Go backend
+      // Debounced auto-save
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
@@ -146,10 +170,19 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       saveTimeoutRef.current = setTimeout(async () => {
         try {
           const firstSlugline = dynamicScenes[0]?.slugline || "INT. OPENING SCENE - DAY";
+          let payloadToSave = html;
+
+          // Always get the latest in-memory SCK from the cryptographic store
+          const currentKey = useEncryptionStore.getState().screenplayKeys[project.id];
+          if (currentKey) {
+            const encryptedPayload = await encryptScreenplayContent(json, currentKey);
+            payloadToSave = JSON.stringify(encryptedPayload);
+          }
+
           await updateProjectMutation.mutateAsync({
             id: project.id,
             data: {
-              screenplayContent: html,
+              screenplayContent: payloadToSave,
               lastEditedScene: firstSlugline,
             },
           });
@@ -162,6 +195,33 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       }, 1200);
     },
   });
+
+  // Attempt to load metadata and decrypt on mount
+  useEffect(() => {
+    const isEncrypted = !!parseEncryptedPayloadString(project.screenplayContent);
+    
+    useEncryptionStore.getState().fetchUserMetadata().then((meta) => {
+      if (isEncrypted && !isUnlocked) {
+        setEncryptionDialogOpen(true);
+      }
+    });
+  }, [project.screenplayContent, isUnlocked]);
+
+  // Decrypt content when key becomes available in memory
+  useEffect(() => {
+    if (!editor || !screenplayKey) return;
+
+    const parsedPayload = parseEncryptedPayloadString(project.screenplayContent);
+    if (parsedPayload) {
+      decryptScreenplayContent(parsedPayload, screenplayKey)
+        .then((doc) => {
+          editor.commands.setContent(doc);
+        })
+        .catch((err) => {
+          console.error("Failed to decrypt initial content:", err);
+        });
+    }
+  }, [editor, screenplayKey, project.screenplayContent]);
 
   // Handle format element buttons
   const handleSetElementType = useCallback(
@@ -222,9 +282,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             <span className="font-semibold text-sm tracking-tight truncate max-w-[180px] sm:max-w-xs">
               {project.title}
             </span>
-            <Badge variant="outline" className="text-[10px] hidden md:inline-flex">
-              Screenplay Editor
-            </Badge>
+            <div
+              id="e2ee-encryption-badge"
+              onClick={() => setEncryptionDialogOpen(true)}
+              className="cursor-pointer"
+            >
+              <EncryptionBadge screenplayId={project.id} />
+            </div>
           </div>
         </div>
 
@@ -248,31 +312,25 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          {/* Toggle Scenes Navigator */}
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setNavigatorOpen(!navigatorOpen)}
-            className="h-8 px-2.5 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-            title={navigatorOpen ? "Hide Scenes" : "Show Scenes"}
+            className="h-8 w-8 p-0"
+            title={navigatorOpen ? "Hide scene navigator" : "Show scene navigator"}
           >
-            {navigatorOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
-            <span className="hidden md:inline">Scenes</span>
+            {navigatorOpen ? (
+              <PanelLeftClose className="h-4 w-4" />
+            ) : (
+              <PanelLeft className="h-4 w-4" />
+            )}
           </Button>
 
-          {/* Preview Button */}
-          <Link href={`/projects/${project.id}/preview`}>
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-              <Eye className="h-3.5 w-3.5" />
-              <span>Preview</span>
-            </Button>
-          </Link>
-
-          {/* Export Button */}
           <Button
+            variant="outline"
             size="sm"
             onClick={() => setExportModalOpen(true)}
-            className="h-8 text-xs gap-1.5"
+            className="gap-1.5 text-xs font-medium h-8"
           >
             <Download className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Export</span>
@@ -280,11 +338,14 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         </div>
       </header>
 
-      {/* Screenplay Element Toolbar with Find/Search */}
-      <ScreenplayToolbar editor={editor} onSetElementType={handleSetElementType} />
+      {/* Formatting Toolbar */}
+      <ScreenplayToolbar
+        editor={editor}
+        onSetElementType={handleSetElementType}
+      />
 
-      {/* Main Workspace: Scene Navigator + Multi-Page Paper Canvas */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Workspace: Navigator + Virtual Page Canvas */}
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left Scene Navigator */}
         {navigatorOpen && (
           <SceneNavigator
@@ -294,46 +355,74 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           />
         )}
 
-        {/* Main Canvas Scroll Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center bg-muted/20">
-          {/* Multi-Page 8.5x11 Screenplay Canvas with Physical Page Boundaries */}
+        {/* Center Page Canvas Area */}
+        <main className="flex-1 overflow-y-auto flex justify-center py-8 px-4 sm:px-6 md:px-8 bg-muted/40 transition-all">
           <div
-            style={{ minHeight: `${calculatedMinHeight}px` }}
-            className="w-full max-w-[820px] screenplay-paper dark:screenplay-paper-dark rounded-md border border-border shadow-md my-4 relative screenplay-editor flex flex-col transition-all duration-300"
+            className="w-full max-w-[850px] bg-background shadow-lg border border-border/80 rounded-sm min-h-[1056px] relative p-12 sm:p-16 mb-16"
+            style={{
+              minHeight: `${calculatedMinHeight}px`,
+            }}
           >
-            {/* Page 1 Header */}
-            <div className="flex justify-between items-center text-[11px] font-screenplay text-muted-foreground px-12 pt-8 pb-3 border-b border-border/20 select-none">
-              <span>{project.title.toUpperCase()}</span>
-              <span>Page 1.</span>
-            </div>
-
-            {/* TipTap Editor Content */}
-            <EditorContent editor={editor} className="flex-1" />
+            <EditorContent editor={editor} />
           </div>
         </main>
       </div>
 
-      {/* Bottom Status Bar */}
-      <footer className="h-8 border-t border-border bg-background px-4 flex items-center justify-between text-[11px] text-muted-foreground shrink-0 select-none">
-        <div className="flex items-center gap-4">
-          <span>{stats.pageCount} {stats.pageCount === 1 ? "Page" : "Pages"}</span>
-          <span>{stats.wordCount.toLocaleString()} Words</span>
-          <span>{stats.sceneCount} Scenes</span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-[10px] font-mono h-5">
-            Courier Prime 12pt
-          </Badge>
-          <span>Industry Standard 8.5&quot; x 11&quot;</span>
-        </div>
-      </footer>
-
-      {/* Export Dialog */}
+      {/* Export Modal */}
       <ExportModal
-        project={project}
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
+        project={project}
+      />
+
+      {/* E2EE Setup / Unlock Modal */}
+      <EncryptionDialog
+        open={encryptionDialogOpen}
+        onOpenChange={setEncryptionDialogOpen}
+        mode={useEncryptionStore.getState().userMetadata ? "unlock" : "setup"}
+        onSuccess={async () => {
+          let key = useEncryptionStore.getState().screenplayKeys[project.id];
+          if (!key) {
+            try {
+              key = await useEncryptionStore.getState().loadAndUnlockScreenplayKey(project.id);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message.toLowerCase() : "";
+              const statusCode = (err as { statusCode?: number })?.statusCode || (err as { status?: number })?.status;
+              const code = (err as { code?: string })?.code;
+              if (
+                statusCode === 404 ||
+                code === "NOT_FOUND" ||
+                code === "ENTITY_NOT_FOUND" ||
+                msg.includes("404") ||
+                msg.includes("not found") ||
+                msg.includes("screenplay key not found")
+              ) {
+                const res = await useEncryptionStore.getState().createAndWrapScreenplayKey(project.id);
+                key = res.sck;
+              } else {
+                throw err;
+              }
+            }
+          }
+
+          if (key && editor) {
+            const currentContent = project.screenplayContent;
+            const parsed = parseEncryptedPayloadString(currentContent);
+            if (parsed) {
+              const decryptedDoc = await decryptScreenplayContent(parsed, key);
+              editor.commands.setContent(decryptedDoc);
+            } else {
+              const json = editor.getJSON() as TipTapDocumentJSON;
+              const encrypted = await encryptScreenplayContent(json, key);
+              await updateProjectMutation.mutateAsync({
+                id: project.id,
+                data: {
+                  screenplayContent: JSON.stringify(encrypted),
+                },
+              });
+            }
+          }
+        }}
       />
     </div>
   );

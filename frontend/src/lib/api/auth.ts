@@ -87,4 +87,33 @@ export const authApi = {
       body: JSON.stringify(data),
     });
   },
+
+  async getEncryptionMetadata(): Promise<{
+    userId: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/encryption-metadata");
+  },
+
+  async setEncryptionMetadata(data: {
+    salt: string;
+    iterations?: number;
+    hashAlgorithm?: string;
+  }): Promise<{
+    userId: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/encryption-metadata", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };

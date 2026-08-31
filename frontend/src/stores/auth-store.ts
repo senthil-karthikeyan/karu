@@ -80,6 +80,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       clearTokens();
     } finally {
       clearTokens();
+      // Import dynamically or directly to clear ephemeral keys
+      try {
+        const { useEncryptionStore } = await import("./encryption-store");
+        useEncryptionStore.getState().clearEncryptionSession();
+      } catch {
+        // Safe fallback
+      }
       set({ user: null, isAuthenticated: false, isInitialized: true, isLoading: false });
     }
   },

@@ -240,7 +240,7 @@ func TestRepositoriesIntegration(t *testing.T) {
 	}
 
 	// 5. Screenplay Creation & Initial Content
-	screenplay, err := screenplayRepo.CreateScreenplay(ctx, proj.ID, "Draft 1", "Initial draft", "<p>Scene 1</p>")
+	screenplay, err := screenplayRepo.CreateScreenplay(ctx, proj.ID, "Draft 1", "Initial draft", "<p>Scene 1</p>", nil, nil, user.ID)
 	if err != nil {
 		t.Fatalf("Failed to create screenplay: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestRepositoriesIntegration(t *testing.T) {
 	}
 
 	// 7. Version Checkpoint & Transactional Restore
-	version1, err := screenplayRepo.CreateVersion(ctx, screenplay.ID, "Version 1 Checkpoint", updatedContent.Content, user.ID)
+	version1, err := screenplayRepo.CreateVersion(ctx, screenplay.ID, "Version 1 Checkpoint", updatedContent.Content.(string), nil, &user.ID)
 	if err != nil {
 		t.Fatalf("Failed to create version: %v", err)
 	}

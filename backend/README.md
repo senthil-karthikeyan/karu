@@ -237,6 +237,46 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/karu?sslmode=disable
 
 1. `000001_initial_schema`: Initial schema defining `users`, `projects`, `scenes`, and `activities`.
 2. `000002_auth_identities_and_screenplays`: Adds `auth_identities`, `refresh_tokens`, `screenplays`, `screenplay_contents`, and `screenplay_versions`.
+3. `000003_e2ee_support`: Adds `user_encryption_metadata` (salt & PBKDF2 settings), `screenplay_keys` (wrapped SCKs), and extends `screenplay_contents` and `screenplay_versions` with `is_encrypted`, `encryption_version`, `algorithm`, `iv`, and `ciphertext`.
+
+---
+
+## 🔐 Zero-Knowledge End-to-End Encryption (E2EE)
+
+Karu features a **zero-knowledge cryptographic architecture** where screenplay content is encrypted and decrypted strictly client-side via the Web Crypto API before transmission:
+
+```text
+               CLIENT BROWSER                                  BACKEND (Zero-Knowledge)
+ ┌──────────────────────────────────────────┐          ┌──────────────────────────────────────┐
+ │ Passphrase ──[PBKDF2-SHA256 600k]──► UEK │          │                                      │
+ │                                    │     │          │  user_encryption_metadata            │
+ │                                    ▼     │  Store   │  • user_id                           │
+ │ Screenplay Content Key (SCK) ──► Wrapped ├─────────►│  • salt (16 bytes base64)            │
+ │             │                            │   SCK    │  • iterations: 600,000               │
+ │             ▼                            │          │  • hash_algorithm: "SHA-256"         │
+ │   TipTap Document JSON                   │          │                                      │
+ │             │                            │          │  screenplay_keys                     │
+ │      [AES-GCM 256-bit]                   │          │  • screenplay_id                     │
+ │             │                            │  Store   │  • user_id                           │
+ │             ▼                            ├─────────►│  • wrapped_key & 12-byte IV          │
+ │      EncryptedPayload                    │Ciphertext│                                      │
+ │  • iv: 12-byte base64                    │          │  screenplay_contents                 │
+ │  • ciphertext: base64                    │          │  • is_encrypted: true                │
+ │  • version: 1, algo: "AES-GCM"           │          │  • iv & ciphertext (opaque bytes)    │
+ └──────────────────────────────────────────┘          └──────────────────────────────────────┘
+```
+
+### Key Cryptographic Invariants
+1. **Zero Knowledge**: The Go backend **never** receives or stores passphrases, unwrapped keys, or plaintext document content.
+2. **Key Hierarchy**:
+   - **UEK (User Encryption Key)**: AES-GCM 256-bit key derived client-side from the user's passphrase and per-user salt via PBKDF2 (SHA-256, 600,000 iterations).
+   - **SCK (Screenplay Content Key)**: Unique 256-bit AES-GCM key generated per screenplay and wrapped by the UEK.
+3. **Payload Structure**: All encrypted screenplay contents and version checkpoints are stored with:
+   - `version: 1`
+   - `algorithm: "AES-GCM"`
+   - `iv`: Base64-encoded 96-bit (12-byte) initialization vector.
+   - `ciphertext`: Base64-encoded ciphertext with 128-bit GCM authentication tag.
+4. **Backward Compatibility**: Non-encrypted screenplays (`is_encrypted: false`) continue to function alongside E2EE screenplays seamlessly.
 
 ---
 
@@ -261,12 +301,14 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/karu?sslmode=disable
 | `GET` | `/api/v1/auth/google` | No | Initiate Google OAuth flow via Goth |
 | `GET` | `/api/v1/auth/google/callback` | No | Complete Google OAuth callback and issue tokens |
 
-### User Profile
+### User Profile & Encryption Metadata
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/users/me` | **Yes** | Retrieve authenticated user profile and preferences |
 | `PATCH` | `/api/v1/users/me` | **Yes** | Update user name, bio, avatar, or editor preferences |
+| `GET` | `/api/v1/users/me/encryption-metadata` | **Yes** | Get user's salt and PBKDF2 parameters for deriving UEK |
+| `POST` | `/api/v1/users/me/encryption-metadata` | **Yes** | Set or update user's encryption salt and PBKDF2 configuration |
 
 ### Projects & Scenes
 
@@ -283,19 +325,21 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/karu?sslmode=disable
 | `DELETE` | `/api/v1/projects/:id/scenes/:sceneId` | **Yes** | Delete a scene |
 | `GET` | `/api/v1/projects/:id/activities` | **Yes** | List project activity history audit log |
 
-### Screenplays, Content & Versions
+### Screenplays, Content, Keys & Versions
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/projects/:id/screenplays` | **Yes** | List all screenplays within a project |
-| `POST` | `/api/v1/projects/:id/screenplays` | **Yes** | Create a screenplay with initial revision |
+| `POST` | `/api/v1/projects/:id/screenplays` | **Yes** | Create a screenplay with initial revision and optional wrapped key |
 | `GET` | `/api/v1/screenplays/:id` | **Yes** | Get screenplay details and current content |
 | `PATCH` | `/api/v1/screenplays/:id` | **Yes** | Update screenplay title or description |
 | `DELETE` | `/api/v1/screenplays/:id` | **Yes** | Delete screenplay |
-| `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current content and revision number |
+| `GET` | `/api/v1/screenplays/:id/key` | **Yes** | Retrieve authenticated user's wrapped SCK for this screenplay |
+| `POST` | `/api/v1/screenplays/:id/key` | **Yes** | Store or update wrapped SCK for this screenplay |
+| `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current content (plaintext or ciphertext) and revision |
 | `PUT` | `/api/v1/screenplays/:id/content` | **Yes** | Autosave content with OCC (returns 409 on revision conflict) |
 | `GET` | `/api/v1/screenplays/:id/versions` | **Yes** | List historical version checkpoints |
-| `POST` | `/api/v1/screenplays/:id/versions` | **Yes** | Create a named version checkpoint |
+| `POST` | `/api/v1/screenplays/:id/versions` | **Yes** | Create a named version checkpoint (stores ciphertext snapshot) |
 | `GET` | `/api/v1/screenplays/:id/versions/:versionId` | **Yes** | Retrieve a specific historical version snapshot |
 | `POST` | `/api/v1/screenplays/:id/versions/:versionId/restore` | **Yes** | Transactionally restore screenplay to historical version |
 
@@ -396,7 +440,7 @@ make build
 make test
 ```
 
-Runs unit tests across `./internal/auth`, `./internal/service`, `./internal/handler`, and `./internal/server`.
+Runs unit tests across `./internal/auth`, `./internal/model`, `./internal/service`, `./internal/handler`, and `./internal/router`.
 
 ### Run Integration Tests (Testcontainers)
 
@@ -414,7 +458,9 @@ go test ./... -v
 
 ---
 
-## ⚠️ Current Limitations
+## 👥 Multi-Tenancy & Security
 
-* **End-to-End Encryption (E2EE)**: **Not currently implemented.** Screenplay content is persisted in plaintext in the database.
-* **Project Sharing & Collaboration**: **Not currently implemented.** Projects and screenplays are strictly isolated to the creating user account.
+* **Zero-Knowledge Security**: Server stores only encrypted ciphertext, IVs, salts, and wrapped keys.
+* **Strict Ownership Validation**: All requests verify user ownership through `Project -> Screenplay -> Content / Keys / Versions`.
+* **Safe Error Semantics**: Unauthorized resource access returns `404 RESOURCE_NOT_FOUND` to prevent identifier enumeration.
+

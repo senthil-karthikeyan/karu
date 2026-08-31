@@ -59,10 +59,11 @@ func (m *mockAuthService) Logout(ctx context.Context, rawRefreshToken string) er
 	return nil
 }
 
-// Mock UserService
 type mockUserService struct {
-	getProfileFunc    func(ctx context.Context, userID uuid.UUID) (*model.UserResponse, error)
-	updateProfileFunc func(ctx context.Context, userID uuid.UUID, req model.UpdateUserRequest) (*model.UserResponse, error)
+	getProfileFunc            func(ctx context.Context, userID uuid.UUID) (*model.UserResponse, error)
+	updateProfileFunc         func(ctx context.Context, userID uuid.UUID, req model.UpdateUserRequest) (*model.UserResponse, error)
+	getEncryptionMetadataFunc func(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error)
+	setEncryptionMetadataFunc func(ctx context.Context, userID uuid.UUID, req model.UserEncryptionMetadataRequest) (*model.UserEncryptionMetadataResponse, error)
 }
 
 func (m *mockUserService) GetProfile(ctx context.Context, userID uuid.UUID) (*model.UserResponse, error) {
@@ -75,6 +76,20 @@ func (m *mockUserService) GetProfile(ctx context.Context, userID uuid.UUID) (*mo
 func (m *mockUserService) UpdateProfile(ctx context.Context, userID uuid.UUID, req model.UpdateUserRequest) (*model.UserResponse, error) {
 	if m.updateProfileFunc != nil {
 		return m.updateProfileFunc(ctx, userID, req)
+	}
+	return nil, nil
+}
+
+func (m *mockUserService) GetEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error) {
+	if m.getEncryptionMetadataFunc != nil {
+		return m.getEncryptionMetadataFunc(ctx, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockUserService) SetEncryptionMetadata(ctx context.Context, userID uuid.UUID, req model.UserEncryptionMetadataRequest) (*model.UserEncryptionMetadataResponse, error) {
+	if m.setEncryptionMetadataFunc != nil {
+		return m.setEncryptionMetadataFunc(ctx, userID, req)
 	}
 	return nil, nil
 }
@@ -136,6 +151,8 @@ type mockScreenplayService struct {
 
 	getContentFunc     func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayContentResponse, error)
 	saveContentFunc    func(ctx context.Context, screenplayID, userID uuid.UUID, req model.SaveContentRequest) (*model.ScreenplayContentResponse, error)
+	getScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
+	setScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error)
 	createVersionFunc  func(ctx context.Context, screenplayID, userID uuid.UUID, req model.CreateVersionRequest) (*model.ScreenplayVersionResponse, error)
 	listVersionsFunc   func(ctx context.Context, screenplayID, userID uuid.UUID) ([]model.ScreenplayVersionResponse, error)
 	getVersionFunc     func(ctx context.Context, screenplayID, versionID, userID uuid.UUID) (*model.ScreenplayVersionResponse, error)
@@ -181,6 +198,18 @@ func (m *mockScreenplayService) GetContent(ctx context.Context, screenplayID, us
 func (m *mockScreenplayService) SaveContent(ctx context.Context, screenplayID, userID uuid.UUID, req model.SaveContentRequest) (*model.ScreenplayContentResponse, error) {
 	if m.saveContentFunc != nil {
 		return m.saveContentFunc(ctx, screenplayID, userID, req)
+	}
+	return nil, nil
+}
+func (m *mockScreenplayService) GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
+	if m.getScreenplayKeyFunc != nil {
+		return m.getScreenplayKeyFunc(ctx, screenplayID, userID)
+	}
+	return nil, nil
+}
+func (m *mockScreenplayService) SetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error) {
+	if m.setScreenplayKeyFunc != nil {
+		return m.setScreenplayKeyFunc(ctx, screenplayID, userID, req)
 	}
 	return nil, nil
 }
@@ -399,3 +428,117 @@ func TestScreenplayContentAutosaveEndpoint(t *testing.T) {
 		t.Fatalf("Expected 409 Conflict for stale revision, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestUserEncryptionMetadataEndpoints(t *testing.T) {
+	mockUserID := uuid.New()
+	salt := "MTIzNDU2Nzg5MDEyMzQ1Ng==" // 16 bytes base64
+
+	userSvc := &mockUserService{
+		getEncryptionMetadataFunc: func(ctx context.Context, uID uuid.UUID) (*model.UserEncryptionMetadataResponse, error) {
+			return &model.UserEncryptionMetadataResponse{
+				UserID:        uID,
+				Salt:          salt,
+				Iterations:    600000,
+				HashAlgorithm: "SHA-256",
+			}, nil
+		},
+		setEncryptionMetadataFunc: func(ctx context.Context, uID uuid.UUID, req model.UserEncryptionMetadataRequest) (*model.UserEncryptionMetadataResponse, error) {
+			return &model.UserEncryptionMetadataResponse{
+				UserID:        uID,
+				Salt:          req.Salt,
+				Iterations:    600000,
+				HashAlgorithm: "SHA-256",
+			}, nil
+		},
+	}
+
+	r, tm := setupTestApp(&mockAuthService{}, userSvc, &mockProjectService{}, nil, nil)
+	accessToken, _, _ := tm.GenerateAccessToken(mockUserID, "writer@karu.app")
+
+	// 1. GET /api/v1/users/me/encryption-metadata
+	req, _ := http.NewRequest("GET", "/api/v1/users/me/encryption-metadata", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for GET encryption-metadata, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 2. POST /api/v1/users/me/encryption-metadata
+	payload := map[string]interface{}{
+		"salt":          salt,
+		"iterations":    600000,
+		"hashAlgorithm": "SHA-256",
+	}
+	pBytes, _ := json.Marshal(payload)
+	req, _ = http.NewRequest("POST", "/api/v1/users/me/encryption-metadata", bytes.NewReader(pBytes))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for POST encryption-metadata, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestScreenplayKeyEndpoints(t *testing.T) {
+	mockUserID := uuid.New()
+	screenplayID := uuid.New()
+	iv := "MTIzNDU2Nzg5MDEy" // 12 bytes base64
+	wrappedKey := "MzItYnl0ZXMtd3JhcHBlZC1rZXktbWF0ZXJpYWw="
+
+	screenplaySvc := &mockScreenplayService{
+		getScreenplayKeyFunc: func(ctx context.Context, sID, uID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
+			return &model.ScreenplayKeyResponse{
+				ScreenplayID: sID,
+				Version:      1,
+				Algorithm:    "AES-GCM",
+				IV:           iv,
+				WrappedKey:   wrappedKey,
+			}, nil
+		},
+		setScreenplayKeyFunc: func(ctx context.Context, sID, uID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error) {
+			return &model.ScreenplayKeyResponse{
+				ScreenplayID: sID,
+				Version:      req.Version,
+				Algorithm:    req.Algorithm,
+				IV:           req.IV,
+				WrappedKey:   req.WrappedKey,
+			}, nil
+		},
+	}
+
+	r, tm := setupTestApp(&mockAuthService{}, &mockUserService{}, &mockProjectService{}, screenplaySvc, nil)
+	accessToken, _, _ := tm.GenerateAccessToken(mockUserID, "writer@karu.app")
+
+	// 1. GET /api/v1/screenplays/:id/key
+	req, _ := http.NewRequest("GET", "/api/v1/screenplays/"+screenplayID.String()+"/key", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for GET screenplay key, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 2. POST /api/v1/screenplays/:id/key
+	payload := map[string]interface{}{
+		"version":    1,
+		"algorithm":  "AES-GCM",
+		"iv":         iv,
+		"wrappedKey": wrappedKey,
+	}
+	pBytes, _ := json.Marshal(payload)
+	req, _ = http.NewRequest("POST", "/api/v1/screenplays/"+screenplayID.String()+"/key", bytes.NewReader(pBytes))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected 200 for POST screenplay key, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
