@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"backend/internal/model"
@@ -28,7 +29,7 @@ type ScreenplayRepository interface {
 
 	// Screenplay CRUD & Content
 	CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
-	GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error)
+	GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	GetScreenplayWithOwnership(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
 	ListScreenplaysByProject(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
 	UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
@@ -58,14 +59,16 @@ func NewScreenplayRepository(pool *pgxpool.Pool) ScreenplayRepository {
 	}
 }
 
-func toScreenplayResponse(s generated.Screenplay) model.ScreenplayResponse {
+func toScreenplayResponse(id, projectID pgtype.UUID, title, description string, isDefault bool, sortOrder int32, createdAt, updatedAt pgtype.Timestamptz) model.ScreenplayResponse {
 	return model.ScreenplayResponse{
-		ID:          pgtypeToUUID(s.ID),
-		ProjectID:   pgtypeToUUID(s.ProjectID),
-		Title:       s.Title,
-		Description: s.Description,
-		CreatedAt:   pgtypeToTime(s.CreatedAt),
-		UpdatedAt:   pgtypeToTime(s.UpdatedAt),
+		ID:          pgtypeToUUID(id),
+		ProjectID:   pgtypeToUUID(projectID),
+		Title:       title,
+		Description: description,
+		IsDefault:   isDefault,
+		SortOrder:   int(sortOrder),
+		CreatedAt:   pgtypeToTime(createdAt),
+		UpdatedAt:   pgtypeToTime(updatedAt),
 	}
 }
 
@@ -352,6 +355,8 @@ func (r *screenplayRepository) CreateScreenplay(
 		ProjectID:   uuidToPgtype(projectID),
 		Title:       title,
 		Description: description,
+		IsDefault:   false,
+		SortOrder:   1,
 	})
 	if err != nil {
 		return nil, err
@@ -405,7 +410,7 @@ func (r *screenplayRepository) CreateScreenplay(
 	}
 
 	return &model.ScreenplayDetailResponse{
-		ScreenplayResponse: toScreenplayResponse(screenplay),
+		ScreenplayResponse: toScreenplayResponse(screenplay.ID, screenplay.ProjectID, screenplay.Title, screenplay.Description, screenplay.IsDefault, screenplay.SortOrder, screenplay.CreatedAt, screenplay.UpdatedAt),
 		Content:            detailContent,
 		Revision:           content.Revision,
 		IsEncrypted:        content.IsEncrypted,
@@ -416,7 +421,7 @@ func (r *screenplayRepository) CreateScreenplay(
 	}, nil
 }
 
-func (r *screenplayRepository) GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error) {
+func (r *screenplayRepository) GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error) {
 	s, err := r.queries.GetScreenplayByID(ctx, uuidToPgtype(id))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -452,14 +457,7 @@ func (r *screenplayRepository) ListScreenplaysByProject(ctx context.Context, pro
 
 	res := make([]model.ScreenplayResponse, 0, len(rows))
 	for _, row := range rows {
-		res = append(res, model.ScreenplayResponse{
-			ID:          pgtypeToUUID(row.ID),
-			ProjectID:   pgtypeToUUID(row.ProjectID),
-			Title:       row.Title,
-			Description: row.Description,
-			CreatedAt:   pgtypeToTime(row.CreatedAt),
-			UpdatedAt:   pgtypeToTime(row.UpdatedAt),
-		})
+		res = append(res, toScreenplayResponse(row.ID, row.ProjectID, row.Title, row.Description, row.IsDefault, row.SortOrder, row.CreatedAt, row.UpdatedAt))
 	}
 	return res, nil
 }
@@ -485,7 +483,7 @@ func (r *screenplayRepository) UpdateScreenplay(ctx context.Context, id uuid.UUI
 		return nil, err
 	}
 
-	resp := toScreenplayResponse(s)
+	resp := toScreenplayResponse(s.ID, s.ProjectID, s.Title, s.Description, s.IsDefault, s.SortOrder, s.CreatedAt, s.UpdatedAt)
 	return &resp, nil
 }
 

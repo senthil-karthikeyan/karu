@@ -126,7 +126,7 @@ type mockScreenplayRepo struct {
 	deleteScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) error
 
 	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
-	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error)
+	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	getOwnershipFunc     func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
 	listByProjectFunc    func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
 	updateScreenplayFunc func(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
@@ -221,7 +221,7 @@ func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uui
 	return nil, nil
 }
 
-func (m *mockScreenplayRepo) GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.Screenplay, error) {
+func (m *mockScreenplayRepo) GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error) {
 	if m.getScreenplayFunc != nil {
 		return m.getScreenplayFunc(ctx, id)
 	}

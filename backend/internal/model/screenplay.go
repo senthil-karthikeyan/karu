@@ -12,6 +12,8 @@ type ScreenplayResponse struct {
 	ProjectID   uuid.UUID `json:"projectId"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
+	IsDefault   bool      `json:"isDefault"`
+	SortOrder   int       `json:"sortOrder"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
@@ -30,6 +32,8 @@ type ScreenplayDetailResponse struct {
 type CreateScreenplayRequest struct {
 	Title            string             `json:"title" binding:"required"`
 	Description      string             `json:"description"`
+	IsDefault        bool               `json:"isDefault,omitempty"`
+	SortOrder        int                `json:"sortOrder,omitempty"`
 	EncryptedPayload *EncryptedPayload  `json:"encryptedPayload,omitempty"`
 	WrappedKey       *WrappedKeyPayload `json:"wrappedKey,omitempty"`
 }
@@ -37,6 +41,8 @@ type CreateScreenplayRequest struct {
 type UpdateScreenplayRequest struct {
 	Title       *string `json:"title"`
 	Description *string `json:"description"`
+	IsDefault   *bool   `json:"isDefault"`
+	SortOrder   *int    `json:"sortOrder"`
 }
 
 type ScreenplayContentResponse struct {

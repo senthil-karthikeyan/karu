@@ -66,7 +66,7 @@ func (r *userRepository) Create(ctx context.Context, email, passwordHash, name, 
 		Name:         name,
 		AvatarUrl:    avatarURL,
 		Bio:          bio,
-		Preferences:  prefBytes,
+		Preferences:  string(prefBytes),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
