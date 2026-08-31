@@ -14,9 +14,12 @@ import (
 )
 
 type ScreenplayRepository interface {
-	// User Encryption Metadata
+	// User Encryption Metadata & Identity
 	GetUserEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error)
 	UpsertUserEncryptionMetadata(ctx context.Context, userID uuid.UUID, salt string, iterations int, hashAlgo string) (*model.UserEncryptionMetadataResponse, error)
+	GetUserEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error)
+	GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error)
+	UpsertUserEncryptionIdentity(ctx context.Context, userID uuid.UUID, publicKey, encryptedPrivateKey, keyIV, algorithm string, version int) (*model.UserEncryptionIdentityPayload, error)
 
 	// Screenplay Keys
 	GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
@@ -204,6 +207,69 @@ func (r *screenplayRepository) UpsertUserEncryptionMetadata(ctx context.Context,
 		HashAlgorithm: m.HashAlgorithm,
 		CreatedAt:     pgtypeToTime(m.CreatedAt),
 		UpdatedAt:     pgtypeToTime(m.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) GetUserEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error) {
+	ident, err := r.queries.GetUserEncryptionIdentity(ctx, uuidToPgtype(userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &model.UserEncryptionIdentityPayload{
+		UserID:              pgtypeToUUID(ident.UserID),
+		PublicKey:           ident.PublicKey,
+		EncryptedPrivateKey: ident.EncryptedPrivateKey,
+		KeyIV:               ident.KeyIv,
+		Algorithm:           ident.Algorithm,
+		Version:             int(ident.Version),
+		CreatedAt:           pgtypeToTime(ident.CreatedAt),
+		UpdatedAt:           pgtypeToTime(ident.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error) {
+	row, err := r.queries.GetUserPublicKey(ctx, uuidToPgtype(userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &model.UserPublicKeyResponse{
+		UserID:    pgtypeToUUID(row.UserID),
+		PublicKey: row.PublicKey,
+		Algorithm: row.Algorithm,
+		Version:   int(row.Version),
+	}, nil
+}
+
+func (r *screenplayRepository) UpsertUserEncryptionIdentity(ctx context.Context, userID uuid.UUID, publicKey, encryptedPrivateKey, keyIV, algorithm string, version int) (*model.UserEncryptionIdentityPayload, error) {
+	ident, err := r.queries.UpsertUserEncryptionIdentity(ctx, generated.UpsertUserEncryptionIdentityParams{
+		UserID:              uuidToPgtype(userID),
+		PublicKey:           publicKey,
+		EncryptedPrivateKey: encryptedPrivateKey,
+		KeyIv:               keyIV,
+		Algorithm:           algorithm,
+		Version:             int32(version),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.UserEncryptionIdentityPayload{
+		UserID:              pgtypeToUUID(ident.UserID),
+		PublicKey:           ident.PublicKey,
+		EncryptedPrivateKey: ident.EncryptedPrivateKey,
+		KeyIV:               ident.KeyIv,
+		Algorithm:           ident.Algorithm,
+		Version:             int(ident.Version),
+		CreatedAt:           pgtypeToTime(ident.CreatedAt),
+		UpdatedAt:           pgtypeToTime(ident.UpdatedAt),
 	}, nil
 }
 

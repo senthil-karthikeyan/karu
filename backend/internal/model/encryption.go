@@ -93,6 +93,23 @@ type UserEncryptionIdentityPayload struct {
 	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
+// UserEncryptionIdentityRequest is sent when setting or updating the user's asymmetric identity keypair.
+type UserEncryptionIdentityRequest struct {
+	PublicKey           string `json:"publicKey" binding:"required"`
+	EncryptedPrivateKey string `json:"encryptedPrivateKey" binding:"required"`
+	KeyIV               string `json:"keyIv" binding:"required"`
+	Algorithm           string `json:"algorithm"`
+	Version             int    `json:"version"`
+}
+
+// UserPublicKeyResponse represents the public key export of a user for sharing.
+type UserPublicKeyResponse struct {
+	UserID    uuid.UUID `json:"userId"`
+	PublicKey string    `json:"publicKey"`
+	Algorithm string    `json:"algorithm"`
+	Version   int       `json:"version"`
+}
+
 // ValidateSalt validates the format, size, and Base64 validity of the salt.
 func ValidateSalt(salt string) error {
 	if salt == "" {
@@ -167,5 +184,43 @@ func ValidateWrappedKeyPayload(p WrappedKeyPayload) error {
 	if len(keyBytes) > MaxWrappedKeyBytesLength {
 		return fmt.Errorf("wrappedKey exceeds maximum allowed size of %d bytes", MaxWrappedKeyBytesLength)
 	}
+	return nil
+}
+
+// ValidateUserEncryptionIdentityRequest ensures public key and wrapped private key conform to size and Base64 constraints.
+func ValidateUserEncryptionIdentityRequest(r UserEncryptionIdentityRequest) error {
+	if r.PublicKey == "" {
+		return errors.New("publicKey is required")
+	}
+	pubBytes, err := base64.StdEncoding.DecodeString(r.PublicKey)
+	if err != nil {
+		return fmt.Errorf("publicKey must be valid Base64: %w", err)
+	}
+	if len(pubBytes) > MaxPublicKeyBytesLength {
+		return fmt.Errorf("publicKey exceeds maximum allowed size of %d bytes", MaxPublicKeyBytesLength)
+	}
+
+	if r.EncryptedPrivateKey == "" {
+		return errors.New("encryptedPrivateKey is required")
+	}
+	privBytes, err := base64.StdEncoding.DecodeString(r.EncryptedPrivateKey)
+	if err != nil {
+		return fmt.Errorf("encryptedPrivateKey must be valid Base64: %w", err)
+	}
+	if len(privBytes) > MaxWrappedKeyBytesLength {
+		return fmt.Errorf("encryptedPrivateKey exceeds maximum allowed size of %d bytes", MaxWrappedKeyBytesLength)
+	}
+
+	if r.KeyIV == "" {
+		return errors.New("keyIv is required")
+	}
+	ivBytes, err := base64.StdEncoding.DecodeString(r.KeyIV)
+	if err != nil {
+		return fmt.Errorf("keyIv must be valid Base64: %w", err)
+	}
+	if len(ivBytes) != ExpectedGCMIVBytesLength {
+		return fmt.Errorf("invalid keyIv length: expected %d bytes (got %d bytes)", ExpectedGCMIVBytesLength, len(ivBytes))
+	}
+
 	return nil
 }

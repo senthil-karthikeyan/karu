@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"backend/internal/middleware"
 	"backend/internal/model"
@@ -113,4 +114,61 @@ func (h *UserHandler) SetEncryptionMetadata(c *gin.Context) {
 	}
 
 	model.SendSuccess(c, http.StatusOK, metadata)
+}
+
+// GetEncryptionIdentity returns the user's public key and UEK-wrapped private key.
+func (h *UserHandler) GetEncryptionIdentity(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	identity, err := h.userService.GetEncryptionIdentity(c.Request.Context(), userID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, identity)
+}
+
+// SetEncryptionIdentity saves or updates the user's public key and wrapped private key.
+func (h *UserHandler) SetEncryptionIdentity(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	var req model.UserEncryptionIdentityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		model.SendError(c, model.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusUnprocessableEntity, err))
+		return
+	}
+
+	identity, err := h.userService.SetEncryptionIdentity(c.Request.Context(), userID, req)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, identity)
+}
+
+// GetUserPublicKey returns the public key export for a given user ID.
+func (h *UserHandler) GetUserPublicKey(c *gin.Context) {
+	targetUserID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrBadRequest)
+		return
+	}
+
+	pubKey, err := h.userService.GetUserPublicKey(c.Request.Context(), targetUserID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, pubKey)
 }

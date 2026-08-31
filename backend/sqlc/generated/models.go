@@ -132,6 +132,17 @@ type User struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type UserEncryptionIdentity struct {
+	UserID              pgtype.UUID        `json:"user_id"`
+	PublicKey           string             `json:"public_key"`
+	EncryptedPrivateKey string             `json:"encrypted_private_key"`
+	KeyIv               string             `json:"key_iv"`
+	Algorithm           string             `json:"algorithm"`
+	Version             int32              `json:"version"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type UserEncryptionMetadatum struct {
 	UserID        pgtype.UUID        `json:"user_id"`
 	Salt          string             `json:"salt"`

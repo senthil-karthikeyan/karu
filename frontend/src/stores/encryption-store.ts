@@ -6,12 +6,17 @@ import {
   DEFAULT_PBKDF2_ITERATIONS,
   type UserEncryptionMetadata,
   type WrappedKeyPayload,
+  type UserIdentityKeyPair,
   uint8ArrayToBase64,
   generateSalt,
   deriveUserEncryptionKey,
   generateScreenplayContentKey,
   wrapScreenplayContentKey,
   unwrapScreenplayContentKey,
+  generateUserIdentityKeyPair,
+  exportUserIdentityPublicKey,
+  wrapUserPrivateKeyWithUEK,
+  unwrapUserPrivateKeyWithUEK,
 } from "@/lib/crypto";
 import { authApi } from "@/lib/api/auth";
 import { screenplaysApi } from "@/lib/api/screenplays";
@@ -20,6 +25,8 @@ interface EncryptionState {
   // Ephemeral In-Memory State (NEVER persisted to disk/storage)
   isUnlocked: boolean;
   activeUEK: CryptoKey | null;
+  identityKeyPair: UserIdentityKeyPair | null;
+  projectKeys: Record<string, CryptoKey>; // Map of projectId -> PEK
   screenplayKeys: Record<string, CryptoKey>; // Map of screenplayId -> SCK
   userMetadata: UserEncryptionMetadata | null;
   isLoading: boolean;
@@ -29,11 +36,13 @@ interface EncryptionState {
   fetchUserMetadata: () => Promise<UserEncryptionMetadata | null>;
   setupNewSecret: (
     secret: string
-  ) => Promise<{ uek: CryptoKey; metadata: UserEncryptionMetadata }>;
+  ) => Promise<{ uek: CryptoKey; metadata: UserEncryptionMetadata; identityKeyPair: UserIdentityKeyPair }>;
   unlockWithSecret: (
     secret: string,
     metadata: UserEncryptionMetadata
   ) => Promise<CryptoKey>;
+  getProjectKey: (projectId: string) => CryptoKey | undefined;
+  setProjectKey: (projectId: string, key: CryptoKey) => void;
   getScreenplayKey: (screenplayId: string) => CryptoKey | undefined;
   setScreenplayKey: (screenplayId: string, key: CryptoKey) => void;
   createAndWrapScreenplayKey: (
@@ -50,6 +59,8 @@ interface EncryptionState {
 export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   isUnlocked: false,
   activeUEK: null,
+  identityKeyPair: null,
+  projectKeys: {},
   screenplayKeys: {},
   userMetadata: null,
   isLoading: false,
@@ -79,7 +90,7 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
 
   /**
    * Initializes encryption for the first time by generating a random salt, deriving the UEK,
-   * and registering the salt & parameters on the backend.
+   * generating the User Identity keypair (ECDH P-256), and registering metadata & public identity on the backend.
    */
   setupNewSecret: async (secret: string) => {
     set({ isLoading: true, error: null });
@@ -94,31 +105,47 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
         hash: "SHA-256",
       };
 
+      // 1. Derive User Master Key (UEK)
       const uek = await deriveUserEncryptionKey(secret, saltBytes, {
         iterations: metadata.iterations,
         hash: metadata.hash,
       });
 
-      // Persist metadata to backend zero-knowledge store
+      // 2. Generate User Encryption Identity (ECDH P-256)
+      const identityKeyPair = await generateUserIdentityKeyPair();
+      const publicExport = await exportUserIdentityPublicKey(identityKeyPair.publicKey);
+      const wrappedPrivate = await wrapUserPrivateKeyWithUEK(uek, identityKeyPair.privateKey);
+
+      // 3. Persist metadata to backend zero-knowledge store
       try {
         await authApi.setEncryptionMetadata({
           salt: metadata.salt,
           iterations: metadata.iterations,
           hashAlgorithm: metadata.hash,
         });
+
+        // 4. Persist User Encryption Identity to backend
+        await authApi.setEncryptionIdentity({
+          publicKey: publicExport.publicKey,
+          encryptedPrivateKey: wrappedPrivate.wrappedKey,
+          keyIv: wrappedPrivate.iv,
+          algorithm: "ECDH-P256",
+          version: CURRENT_ENCRYPTION_VERSION,
+        });
       } catch (apiErr) {
-        console.warn("Could not sync encryption metadata to backend immediately:", apiErr);
+        console.warn("Could not sync encryption metadata or identity to backend immediately:", apiErr);
       }
 
       set({
         activeUEK: uek,
+        identityKeyPair,
         userMetadata: metadata,
         isUnlocked: true,
         isLoading: false,
         error: null,
       });
 
-      return { uek, metadata };
+      return { uek, metadata, identityKeyPair };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to initialize encryption";
       set({ error: msg, isLoading: false });
@@ -127,19 +154,51 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   },
 
   /**
-   * Unlocks the user's encryption session using their secret and stored metadata salt.
+   * Unlocks the user's encryption session using their secret and stored metadata salt,
+   * restoring the active UEK and unwrapping their User Encryption Identity.
    */
   unlockWithSecret: async (secret: string, metadata: UserEncryptionMetadata) => {
     set({ isLoading: true, error: null });
     try {
+      // 1. Re-derive UEK
       const uek = await deriveUserEncryptionKey(secret, metadata.salt, {
         iterations: metadata.iterations,
         hash: metadata.hash,
       });
 
+      // 2. Attempt to restore User Identity Keypair from backend
+      let identityKeyPair: UserIdentityKeyPair | null = null;
+      try {
+        const ident = await authApi.getEncryptionIdentity();
+        if (ident && ident.encryptedPrivateKey && ident.keyIv) {
+          const privateKey = await unwrapUserPrivateKeyWithUEK(uek, {
+            version: CURRENT_ENCRYPTION_VERSION,
+            algorithm: "AES-GCM",
+            iv: ident.keyIv,
+            wrappedKey: ident.encryptedPrivateKey,
+          });
+
+          // Import public key from SPKI Base64
+          const rawPubBytes = Buffer.from(ident.publicKey, "base64");
+          const publicKey = await crypto.subtle.importKey(
+            "spki",
+            rawPubBytes as unknown as BufferSource,
+            { name: "ECDH", namedCurve: "P-256" },
+            true,
+            []
+          );
+
+          identityKeyPair = { publicKey, privateKey };
+        }
+      } catch (identErr) {
+        console.warn("Could not unwrap or fetch encryption identity during unlock:", identErr);
+      }
+
       set({
         activeUEK: uek,
+        identityKeyPair,
         userMetadata: metadata,
+        isUnlocked: true,
         isLoading: false,
         error: null,
       });
@@ -150,6 +209,19 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
       set({ error: msg, isLoading: false });
       throw new Error(msg);
     }
+  },
+
+  getProjectKey: (projectId: string) => {
+    return get().projectKeys[projectId];
+  },
+
+  setProjectKey: (projectId: string, key: CryptoKey) => {
+    set((state) => ({
+      projectKeys: {
+        ...state.projectKeys,
+        [projectId]: key,
+      },
+    }));
   },
 
   getScreenplayKey: (screenplayId: string) => {
@@ -242,12 +314,14 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   },
 
   /**
-   * Purges all active CryptoKeys and ephemeral encryption state from memory.
+   * Purges all active CryptoKeys, User Identity, and ephemeral encryption state from memory.
    */
   clearEncryptionSession: () => {
     set({
       isUnlocked: false,
       activeUEK: null,
+      identityKeyPair: null,
+      projectKeys: {},
       screenplayKeys: {},
       userMetadata: null,
       isLoading: false,

@@ -17,6 +17,10 @@ type UserService interface {
 
 	GetEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error)
 	SetEncryptionMetadata(ctx context.Context, userID uuid.UUID, req model.UserEncryptionMetadataRequest) (*model.UserEncryptionMetadataResponse, error)
+
+	GetEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error)
+	SetEncryptionIdentity(ctx context.Context, userID uuid.UUID, req model.UserEncryptionIdentityRequest) (*model.UserEncryptionIdentityPayload, error)
+	GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error)
 }
 
 type userService struct {
@@ -84,4 +88,36 @@ func (s *userService) SetEncryptionMetadata(ctx context.Context, userID uuid.UUI
 	}
 
 	return s.screenplayRepo.UpsertUserEncryptionMetadata(ctx, userID, req.Salt, iterations, hashAlgo)
+}
+
+func (s *userService) GetEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error) {
+	return s.screenplayRepo.GetUserEncryptionIdentity(ctx, userID)
+}
+
+func (s *userService) SetEncryptionIdentity(ctx context.Context, userID uuid.UUID, req model.UserEncryptionIdentityRequest) (*model.UserEncryptionIdentityPayload, error) {
+	if err := model.ValidateUserEncryptionIdentityRequest(req); err != nil {
+		return nil, fmt.Errorf("%w: %s", model.ErrBadRequest, err.Error())
+	}
+
+	algo := req.Algorithm
+	if algo == "" {
+		algo = model.ExpectedAsymmetricAlgorithm
+	}
+	if algo != model.ExpectedAsymmetricAlgorithm {
+		return nil, fmt.Errorf("%w: unsupported identity algorithm '%s' (expected '%s')", model.ErrBadRequest, algo, model.ExpectedAsymmetricAlgorithm)
+	}
+
+	version := req.Version
+	if version == 0 {
+		version = model.ExpectedEncryptionVersion
+	}
+	if version != model.ExpectedEncryptionVersion {
+		return nil, fmt.Errorf("%w: unsupported encryption version %d (expected %d)", model.ErrBadRequest, version, model.ExpectedEncryptionVersion)
+	}
+
+	return s.screenplayRepo.UpsertUserEncryptionIdentity(ctx, userID, req.PublicKey, req.EncryptedPrivateKey, req.KeyIV, algo, version)
+}
+
+func (s *userService) GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error) {
+	return s.screenplayRepo.GetUserPublicKey(ctx, userID)
 }

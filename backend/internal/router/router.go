@@ -74,6 +74,9 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 				users.PATCH("/me", deps.UserHandler.UpdateMe)
 				users.GET("/me/encryption-metadata", deps.UserHandler.GetEncryptionMetadata)
 				users.POST("/me/encryption-metadata", deps.UserHandler.SetEncryptionMetadata)
+				users.GET("/me/encryption-identity", deps.UserHandler.GetEncryptionIdentity)
+				users.POST("/me/encryption-identity", deps.UserHandler.SetEncryptionIdentity)
+				users.GET("/:id/public-key", deps.UserHandler.GetUserPublicKey)
 			}
 
 			// Project endpoints

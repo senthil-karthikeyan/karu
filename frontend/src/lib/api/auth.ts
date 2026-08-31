@@ -116,4 +116,48 @@ export const authApi = {
       body: JSON.stringify(data),
     });
   },
+
+  async getEncryptionIdentity(): Promise<{
+    userId: string;
+    publicKey: string;
+    encryptedPrivateKey: string;
+    keyIv: string;
+    algorithm: string;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/encryption-identity");
+  },
+
+  async setEncryptionIdentity(data: {
+    publicKey: string;
+    encryptedPrivateKey: string;
+    keyIv: string;
+    algorithm?: string;
+    version?: number;
+  }): Promise<{
+    userId: string;
+    publicKey: string;
+    encryptedPrivateKey: string;
+    keyIv: string;
+    algorithm: string;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/encryption-identity", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getUserPublicKey(userId: string): Promise<{
+    userId: string;
+    publicKey: string;
+    algorithm: string;
+    version: number;
+  }> {
+    return apiClient(`/users/${userId}/public-key`);
+  },
 };

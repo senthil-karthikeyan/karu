@@ -42,7 +42,9 @@ type Querier interface {
 	GetScreenplayVersionByID(ctx context.Context, id pgtype.UUID) (GetScreenplayVersionByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error)
+	GetUserEncryptionIdentity(ctx context.Context, userID pgtype.UUID) (UserEncryptionIdentity, error)
 	GetUserEncryptionMetadata(ctx context.Context, userID pgtype.UUID) (UserEncryptionMetadatum, error)
+	GetUserPublicKey(ctx context.Context, userID pgtype.UUID) (GetUserPublicKeyRow, error)
 	ListActivitiesByProjectID(ctx context.Context, projectID pgtype.UUID) ([]Activity, error)
 	ListProjectsByUserID(ctx context.Context, userID pgtype.UUID) ([]Project, error)
 	ListScenesByProjectID(ctx context.Context, projectID pgtype.UUID) ([]Scene, error)
@@ -60,6 +62,7 @@ type Querier interface {
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (UpdateUserPasswordRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error)
 	UpsertScreenplayKey(ctx context.Context, arg UpsertScreenplayKeyParams) (ScreenplayKey, error)
+	UpsertUserEncryptionIdentity(ctx context.Context, arg UpsertUserEncryptionIdentityParams) (UserEncryptionIdentity, error)
 	UpsertUserEncryptionMetadata(ctx context.Context, arg UpsertUserEncryptionMetadataParams) (UserEncryptionMetadatum, error)
 }
 

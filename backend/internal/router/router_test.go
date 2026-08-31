@@ -94,6 +94,18 @@ func (m *mockUserService) SetEncryptionMetadata(ctx context.Context, userID uuid
 	return nil, nil
 }
 
+func (m *mockUserService) GetEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) SetEncryptionIdentity(ctx context.Context, userID uuid.UUID, req model.UserEncryptionIdentityRequest) (*model.UserEncryptionIdentityPayload, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error) {
+	return nil, nil
+}
+
 // Mock ProjectService
 type mockProjectService struct {
 	createProjectFunc func(ctx context.Context, userID uuid.UUID, req model.CreateProjectRequest) (*model.ProjectResponse, error)

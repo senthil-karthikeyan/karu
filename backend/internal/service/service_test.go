@@ -164,6 +164,27 @@ func (m *mockScreenplayRepo) UpsertUserEncryptionMetadata(ctx context.Context, u
 	}, nil
 }
 
+func (m *mockScreenplayRepo) GetUserEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error) {
+	return nil, model.ErrNotFound
+}
+
+func (m *mockScreenplayRepo) GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error) {
+	return nil, model.ErrNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertUserEncryptionIdentity(ctx context.Context, userID uuid.UUID, publicKey, encryptedPrivateKey, keyIV, algorithm string, version int) (*model.UserEncryptionIdentityPayload, error) {
+	return &model.UserEncryptionIdentityPayload{
+		UserID:              userID,
+		PublicKey:           publicKey,
+		EncryptedPrivateKey: encryptedPrivateKey,
+		KeyIV:               keyIV,
+		Algorithm:           algorithm,
+		Version:             version,
+		CreatedAt:           time.Now(),
+		UpdatedAt:           time.Now(),
+	}, nil
+}
+
 func (m *mockScreenplayRepo) GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
 	if m.getScreenplayKeyFunc != nil {
 		return m.getScreenplayKeyFunc(ctx, screenplayID, userID)
