@@ -411,5 +411,58 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     }
   });
 
+  // 13. Semantic Screenplay Nodes (sceneHeading, action, character, dialogue, parenthetical, transition, shot)
+  await test("Semantic Nodes: Encrypt and decrypt all 7 semantic screenplay nodes", async () => {
+    const sck = await generateScreenplayContentKey();
+
+    const semanticDoc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [
+        {
+          type: "sceneHeading",
+          attrs: { dataType: "scene-heading" },
+          content: [{ type: "text", text: "INT. COMMAND BRIDGE - NIGHT" }],
+        },
+        {
+          type: "action",
+          attrs: { dataType: "action" },
+          content: [{ type: "text", text: "Sparks shower from overhead conduits as emergency sirens wail." }],
+        },
+        {
+          type: "character",
+          attrs: { dataType: "character" },
+          content: [{ type: "text", text: "COMMANDER VANCE" }],
+        },
+        {
+          type: "parenthetical",
+          attrs: { dataType: "parenthetical" },
+          content: [{ type: "text", text: "(gripping the console)" }],
+        },
+        {
+          type: "dialogue",
+          attrs: { dataType: "dialogue" },
+          content: [{ type: "text", text: "Reroute power to the primary deflector grid now!" }],
+        },
+        {
+          type: "shot",
+          attrs: { dataType: "shot" },
+          content: [{ type: "text", text: "ANGLE ON DEFLECTOR ARRAY" }],
+        },
+        {
+          type: "transition",
+          attrs: { dataType: "transition" },
+          content: [{ type: "text", text: "SMASH CUT TO:" }],
+        },
+      ],
+    };
+
+    const encrypted = await encryptScreenplayContent(semanticDoc, sck);
+    const decrypted = await decryptScreenplayContent(encrypted, sck);
+
+    if (JSON.stringify(decrypted) !== JSON.stringify(semanticDoc)) {
+      throw new Error("Semantic screenplay document roundtrip mismatch!");
+    }
+  });
+
   return results;
 }

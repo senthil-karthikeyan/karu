@@ -35,7 +35,8 @@ export type ScreenplayElementType =
   | "character"
   | "dialogue"
   | "parenthetical"
-  | "transition";
+  | "transition"
+  | "shot";
 
 export interface ActivityItem {
   id: string;

@@ -219,6 +219,15 @@
   margin-bottom: 1.25rem;
 }
 
+.screenplay-paper [data-type="shot"],
+.screenplay-editor .tiptap [data-type="shot"] {
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.02em;
+}
+
 /* Page Break Widget within ProseMirror */
 .screenplay-page-break-widget {
   user-select: none;

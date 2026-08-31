@@ -2,40 +2,16 @@ import { Node, Extension } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import type { TipTapDocumentJSON } from "@/lib/crypto/crypto-types";
 
 export const screenplayPaginationPluginKey = new PluginKey("screenplayPagination");
 
-export const ScreenplayParagraph = Node.create({
-  name: "paragraph",
-  priority: 1000,
-  group: "block",
-  content: "inline*",
-
-  addAttributes() {
-    return {
-      dataType: {
-        default: "action",
-        parseHTML: (element: HTMLElement) => element.getAttribute("data-type") || "action",
-        renderHTML: (attributes: Record<string, string | number | undefined>) => {
-          return {
-            "data-type": attributes.dataType || "action",
-          };
-        },
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: "p" }];
-  },
-
-  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, string | number | undefined> }) {
-    return ["p", HTMLAttributes, 0];
-  },
-});
-
-export const ScreenplayHeading = Node.create({
-  name: "heading",
+/**
+ * Semantic Node: SceneHeading
+ * Renders as <h2 data-type="scene-heading">
+ */
+export const SceneHeading = Node.create({
+  name: "sceneHeading",
   priority: 1000,
   group: "block",
   content: "inline*",
@@ -43,84 +19,385 @@ export const ScreenplayHeading = Node.create({
 
   addAttributes() {
     return {
-      level: {
-        default: 2,
-        parseHTML: (element: HTMLElement) => {
-          const level = Number(element.tagName.replace("H", ""));
-          return isNaN(level) ? 2 : level;
-        },
-        renderHTML: () => ({}),
-      },
       dataType: {
         default: "scene-heading",
-        parseHTML: (element: HTMLElement) => element.getAttribute("data-type") || "scene-heading",
-        renderHTML: (attributes: Record<string, string | number | undefined>) => ({
-          "data-type": attributes.dataType || "scene-heading",
-        }),
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "scene-heading",
+        renderHTML: () => ({ "data-type": "scene-heading" }),
       },
     };
   },
 
   parseHTML() {
-    return [{ tag: "h2" }, { tag: "h1" }, { tag: "h3" }];
+    return [
+      { tag: 'h2[data-type="scene-heading"]' },
+      { tag: 'p[data-type="scene-heading"]' },
+      { tag: 'div[data-type="scene-heading"]' },
+      { tag: "h2", priority: 80 },
+      { tag: "h1", priority: 70 },
+      { tag: "h3", priority: 60 },
+    ];
   },
 
-  renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, string | number | undefined> }) {
-    return ["h2", HTMLAttributes, 0];
+  renderHTML({ HTMLAttributes }) {
+    return ["h2", { ...HTMLAttributes, "data-type": "scene-heading" }, 0];
   },
 });
 
+/**
+ * Semantic Node: Action
+ * Renders as <p data-type="action">
+ */
+export const Action = Node.create({
+  name: "action",
+  priority: 900,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "action",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "action",
+        renderHTML: () => ({ "data-type": "action" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="action"]' },
+      { tag: 'div[data-type="action"]' },
+      { tag: "p", priority: 40 },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "action" }, 0];
+  },
+});
+
+/**
+ * Semantic Node: Character
+ * Renders as <p data-type="character">
+ */
+export const Character = Node.create({
+  name: "character",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "character",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "character",
+        renderHTML: () => ({ "data-type": "character" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="character"]' },
+      { tag: 'div[data-type="character"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "character" }, 0];
+  },
+});
+
+/**
+ * Semantic Node: Dialogue
+ * Renders as <p data-type="dialogue">
+ */
+export const Dialogue = Node.create({
+  name: "dialogue",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "dialogue",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "dialogue",
+        renderHTML: () => ({ "data-type": "dialogue" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="dialogue"]' },
+      { tag: 'div[data-type="dialogue"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "dialogue" }, 0];
+  },
+});
+
+/**
+ * Semantic Node: Parenthetical
+ * Renders as <p data-type="parenthetical">
+ */
+export const Parenthetical = Node.create({
+  name: "parenthetical",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "parenthetical",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "parenthetical",
+        renderHTML: () => ({ "data-type": "parenthetical" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="parenthetical"]' },
+      { tag: 'div[data-type="parenthetical"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "parenthetical" }, 0];
+  },
+});
+
+/**
+ * Semantic Node: Transition
+ * Renders as <p data-type="transition">
+ */
+export const Transition = Node.create({
+  name: "transition",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "transition",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "transition",
+        renderHTML: () => ({ "data-type": "transition" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="transition"]' },
+      { tag: 'div[data-type="transition"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "transition" }, 0];
+  },
+});
+
+/**
+ * Semantic Node: Shot
+ * Renders as <p data-type="shot">
+ */
+export const Shot = Node.create({
+  name: "shot",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "shot",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "shot",
+        renderHTML: () => ({ "data-type": "shot" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="shot"]' },
+      { tag: 'div[data-type="shot"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "shot" }, 0];
+  },
+});
+
+/**
+ * All Screenplay Semantic Nodes
+ */
+export const ScreenplayNodes = [
+  SceneHeading,
+  Action,
+  Character,
+  Dialogue,
+  Parenthetical,
+  Transition,
+  Shot,
+];
+
+/**
+ * Backward compatibility alias nodes
+ */
+export const ScreenplayParagraph = Action;
+export const ScreenplayHeading = SceneHeading;
+
+/**
+ * Helper to get the active screenplay node type
+ */
+export function getActiveScreenplayType(editor: {
+  isActive: (name: string, attrs?: Record<string, unknown>) => boolean;
+  getAttributes: (name: string) => Record<string, unknown>;
+}): string {
+  if (editor.isActive("sceneHeading") || editor.isActive("heading")) return "scene-heading";
+  if (editor.isActive("character")) return "character";
+  if (editor.isActive("dialogue")) return "dialogue";
+  if (editor.isActive("parenthetical")) return "parenthetical";
+  if (editor.isActive("transition")) return "transition";
+  if (editor.isActive("shot")) return "shot";
+  return "action";
+}
+
+/**
+ * Normalizes legacy TipTap JSON AST into semantic screenplay nodes
+ */
+export function normalizeScreenplayDoc(doc: TipTapDocumentJSON): TipTapDocumentJSON {
+  if (!doc || !doc.content || !Array.isArray(doc.content)) {
+    return {
+      type: "doc",
+      content: [{ type: "action", content: [{ type: "text", text: "" }] }],
+    };
+  }
+
+  const normalizedContent = doc.content.map((node) => {
+    let typeName = node.type;
+    const dataType =
+      (node.attrs?.dataType as string) ||
+      (node.attrs?.["data-type"] as string) ||
+      "action";
+
+    if (typeName === "heading" || dataType === "scene-heading") {
+      typeName = "sceneHeading";
+    } else if (typeName === "paragraph") {
+      if (dataType === "character") typeName = "character";
+      else if (dataType === "dialogue") typeName = "dialogue";
+      else if (dataType === "parenthetical") typeName = "parenthetical";
+      else if (dataType === "transition") typeName = "transition";
+      else if (dataType === "shot") typeName = "shot";
+      else typeName = "action";
+    }
+
+    return {
+      ...node,
+      type: typeName,
+      attrs: {
+        ...node.attrs,
+        dataType:
+          typeName === "sceneHeading"
+            ? "scene-heading"
+            : typeName,
+      },
+    };
+  });
+
+  return {
+    ...doc,
+    type: "doc",
+    content: normalizedContent,
+  };
+}
+
+/**
+ * Keyboard shortcuts extension for screenplay writing
+ */
 export const ScreenplayShortcuts = Extension.create({
   name: "screenplayShortcuts",
 
   addKeyboardShortcuts() {
     return {
       Tab: () => {
-        const isHeading = this.editor.isActive("heading");
-        const currentType = isHeading
-          ? "scene-heading"
-          : (this.editor.getAttributes("paragraph").dataType as string) || "action";
+        const currentType = getActiveScreenplayType(this.editor);
 
         const cycleMap: Record<string, string> = {
           action: "character",
           character: "dialogue",
           dialogue: "parenthetical",
           parenthetical: "transition",
-          transition: "scene-heading",
+          transition: "shot",
+          shot: "sceneHeading",
           "scene-heading": "action",
+          sceneHeading: "action",
         };
 
         const next = cycleMap[currentType] || "action";
-        if (next === "scene-heading") {
-          this.editor.chain().focus().setHeading({ level: 2 }).run();
-        } else {
-          this.editor.chain().focus().setNode("paragraph", { dataType: next }).run();
-        }
+        this.editor.chain().focus().setNode(next).run();
+        return true;
+      },
+
+      "Shift-Tab": () => {
+        const currentType = getActiveScreenplayType(this.editor);
+
+        const reverseCycleMap: Record<string, string> = {
+          action: "sceneHeading",
+          sceneHeading: "shot",
+          "scene-heading": "shot",
+          shot: "transition",
+          transition: "parenthetical",
+          parenthetical: "dialogue",
+          dialogue: "character",
+          character: "action",
+        };
+
+        const prev = reverseCycleMap[currentType] || "action";
+        this.editor.chain().focus().setNode(prev).run();
         return true;
       },
 
       Enter: () => {
-        const isHeading = this.editor.isActive("heading");
-        if (isHeading) {
-          this.editor.chain().splitBlock().setNode("paragraph", { dataType: "action" }).run();
+        const currentType = getActiveScreenplayType(this.editor);
+
+        if (currentType === "scene-heading" || currentType === "sceneHeading") {
+          this.editor.chain().splitBlock().setNode("action").run();
           return true;
         }
 
-        const currentType = (this.editor.getAttributes("paragraph").dataType as string) || "action";
         if (currentType === "character") {
-          this.editor.chain().splitBlock().setNode("paragraph", { dataType: "dialogue" }).run();
+          this.editor.chain().splitBlock().setNode("dialogue").run();
           return true;
         }
         if (currentType === "parenthetical") {
-          this.editor.chain().splitBlock().setNode("paragraph", { dataType: "dialogue" }).run();
+          this.editor.chain().splitBlock().setNode("dialogue").run();
           return true;
         }
         if (currentType === "dialogue") {
-          this.editor.chain().splitBlock().setNode("paragraph", { dataType: "action" }).run();
+          this.editor.chain().splitBlock().setNode("action").run();
           return true;
         }
         if (currentType === "transition") {
-          this.editor.chain().splitBlock().setHeading({ level: 2 }).run();
+          this.editor.chain().splitBlock().setNode("sceneHeading").run();
+          return true;
+        }
+        if (currentType === "shot") {
+          this.editor.chain().splitBlock().setNode("action").run();
           return true;
         }
 
@@ -131,11 +408,16 @@ export const ScreenplayShortcuts = Extension.create({
 });
 
 export function estimateBlockHeight(node: PMNode): number {
-  const type = (node.attrs.dataType as string) || (node.type.name === "heading" ? "scene-heading" : "action");
+  const type =
+    (node.attrs.dataType as string) ||
+    (node.type.name === "sceneHeading" || node.type.name === "heading"
+      ? "scene-heading"
+      : node.type.name || "action");
+
   const text = node.textContent || "";
   const len = text.length;
 
-  if (type === "scene-heading") {
+  if (type === "scene-heading" || type === "sceneHeading") {
     return 68;
   }
   if (type === "character") {
@@ -150,6 +432,9 @@ export function estimateBlockHeight(node: PMNode): number {
   }
   if (type === "transition") {
     return 60;
+  }
+  if (type === "shot") {
+    return 56;
   }
   const lines = Math.max(1, Math.ceil(len / 72));
   return lines * 21 + 14;

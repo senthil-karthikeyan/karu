@@ -29,11 +29,12 @@ import { ScreenplayToolbar } from "./screenplay-toolbar";
 import { SceneNavigator } from "./scene-navigator";
 import { ExportModal } from "./export-modal";
 import {
-  ScreenplayParagraph,
-  ScreenplayHeading,
+  ScreenplayNodes,
   ScreenplayShortcuts,
   ScreenplayPagination,
+  normalizeScreenplayDoc,
 } from "./screenplay-extensions";
+import type { ScreenplayElementType } from "@/types/screenplay";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/date";
 
@@ -114,7 +115,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     return `<p data-type="action">🔒 Encrypted screenplay draft. Please unlock your encryption session to view and write.</p>`;
   }, [project.screenplayContent]);
 
-  // Initialize TipTap editor with screenplay extensions and pagination
+  // Initialize TipTap editor with semantic screenplay nodes and pagination
   const editor = useEditor({
     immediatelyRender: false,
     editable: !isEncryptedPayload || (isUnlocked && !!screenplayKey),
@@ -123,8 +124,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         paragraph: false,
         heading: false,
       }),
-      ScreenplayParagraph,
-      ScreenplayHeading,
+      ...ScreenplayNodes,
       ScreenplayShortcuts,
       ScreenplayPagination.configure({
         projectTitle: project.title,
@@ -241,7 +241,8 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     if (parsedPayload) {
       decryptScreenplayContent(parsedPayload, screenplayKey)
         .then((doc) => {
-          editor.commands.setContent(doc);
+          const normalized = normalizeScreenplayDoc(doc);
+          editor.commands.setContent(normalized);
           editor.setEditable(true);
         })
         .catch((err) => {
@@ -252,24 +253,23 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     }
   }, [editor, screenplayKey, project.screenplayContent]);
 
-  // Handle format element buttons
+  // Handle format element buttons with semantic TipTap nodes
   const handleSetElementType = useCallback(
-    (
-      type:
-        | "scene-heading"
-        | "action"
-        | "character"
-        | "dialogue"
-        | "parenthetical"
-        | "transition"
-    ) => {
+    (type: ScreenplayElementType) => {
       if (!editor) return;
 
-      if (type === "scene-heading") {
-        editor.chain().focus().setHeading({ level: 2 }).run();
-      } else {
-        editor.chain().focus().setNode("paragraph", { dataType: type }).run();
-      }
+      const nodeMap: Record<ScreenplayElementType, string> = {
+        "scene-heading": "sceneHeading",
+        action: "action",
+        character: "character",
+        dialogue: "dialogue",
+        parenthetical: "parenthetical",
+        transition: "transition",
+        shot: "shot",
+      };
+
+      const targetNode = nodeMap[type] || "action";
+      editor.chain().focus().setNode(targetNode).run();
     },
     [editor]
   );
@@ -460,7 +460,9 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             const parsed = parseEncryptedPayloadString(currentContent);
             if (parsed) {
               const decryptedDoc = await decryptScreenplayContent(parsed, key);
-              editor.commands.setContent(decryptedDoc);
+              const normalized = normalizeScreenplayDoc(decryptedDoc);
+              editor.commands.setContent(normalized);
+              editor.setEditable(true);
             } else {
               const json = editor.getJSON() as TipTapDocumentJSON;
               const encrypted = await encryptScreenplayContent(json, key);

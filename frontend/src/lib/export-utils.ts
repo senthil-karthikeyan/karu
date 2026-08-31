@@ -38,6 +38,8 @@ export function paginateScreenplayHtml(html: string, pageUsableHeight: number = 
       height = lines * 21 + 14;
     } else if (type === "transition") {
       height = 60;
+    } else if (type === "shot") {
+      height = 56;
     } else {
       const lines = Math.max(1, Math.ceil(len / 72));
       height = lines * 21 + 14;
@@ -87,6 +89,8 @@ export function htmlToFountain(html: string, project: Project): string {
         fountain += `${text}\n\n`;
       } else if (type === "transition") {
         fountain += `\n>${text.toUpperCase()}\n\n`;
+      } else if (type === "shot") {
+        fountain += `\n${text.toUpperCase()}\n\n`;
       } else {
         // Action / general paragraph
         fountain += `${text}\n\n`;
@@ -100,6 +104,7 @@ export function htmlToFountain(html: string, project: Project): string {
       .replace(/<p[^>]*data-type="parenthetical"[^>]*>(.*?)<\/p>/gi, "($1)\n")
       .replace(/<p[^>]*data-type="dialogue"[^>]*>(.*?)<\/p>/gi, "$1\n\n")
       .replace(/<p[^>]*data-type="transition"[^>]*>(.*?)<\/p>/gi, "\n>$1\n\n")
+      .replace(/<p[^>]*data-type="shot"[^>]*>(.*?)<\/p>/gi, "\n$1\n\n")
       .replace(/<p[^>]*>(.*?)<\/p>/gi, "$1\n\n")
       .replace(/<[^>]+>/g, "");
   }
@@ -133,6 +138,8 @@ export function htmlToPlainText(html: string, project: Project): string {
         text += `                  ${content}\n\n`;
       } else if (type === "transition") {
         text += `\n                                                        ${content.toUpperCase()}\n\n`;
+      } else if (type === "shot") {
+        text += `\n${content.toUpperCase()}\n\n`;
       } else {
         text += `${content}\n\n`;
       }

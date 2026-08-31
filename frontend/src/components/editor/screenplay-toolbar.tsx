@@ -8,6 +8,7 @@ import {
   User,
   MessageSquare,
   ArrowRight,
+  Camera,
   Bold,
   Italic,
   Underline as UnderlineIcon,
@@ -23,11 +24,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 
+import { getActiveScreenplayType } from "./screenplay-extensions";
+import type { ScreenplayElementType } from "@/types/screenplay";
+
 interface ScreenplayToolbarProps {
   editor: Editor | null;
-  onSetElementType: (
-    type: "scene-heading" | "action" | "character" | "dialogue" | "parenthetical" | "transition"
-  ) => void;
+  onSetElementType: (type: ScreenplayElementType) => void;
 }
 
 export function ScreenplayToolbar({ editor, onSetElementType }: ScreenplayToolbarProps) {
@@ -38,9 +40,7 @@ export function ScreenplayToolbar({ editor, onSetElementType }: ScreenplayToolba
 
   if (!editor) return null;
 
-  const isHeading = editor.isActive("heading", { level: 2 });
-  const currentParagraphType = editor.getAttributes("paragraph").dataType || "action";
-  const activeType = isHeading ? "scene-heading" : currentParagraphType;
+  const activeType = getActiveScreenplayType(editor);
 
   // Search logic across editor text
   const handleSearch = (query: string) => {
@@ -213,6 +213,18 @@ export function ScreenplayToolbar({ editor, onSetElementType }: ScreenplayToolba
           >
             <ArrowRight className="h-3.5 w-3.5" />
             <span>Transition</span>
+          </Button>
+
+          {/* Shot */}
+          <Button
+            type="button"
+            variant={activeType === "shot" ? "default" : "outline"}
+            size="sm"
+            className="h-7 text-xs px-2.5 gap-1.5"
+            onClick={() => onSetElementType("shot")}
+          >
+            <Camera className="h-3.5 w-3.5" />
+            <span>Shot</span>
           </Button>
         </div>
 

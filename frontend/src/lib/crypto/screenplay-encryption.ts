@@ -154,12 +154,31 @@ export function tipTapJsonToHtml(doc: TipTapDocumentJSON): string {
         .map((c) => c.text || "")
         .join("");
 
-      const dataType = (node.attrs?.dataType as string) || "action";
-      if (node.type === "heading") {
-        const level = node.attrs?.level || 2;
-        return `<h${level} data-type="${dataType}">${text}</h${level}>`;
+      const nodeType = node.type;
+      const dataType =
+        (node.attrs?.dataType as string) ||
+        (node.attrs?.["data-type"] as string) ||
+        (nodeType === "sceneHeading" ? "scene-heading" : nodeType);
+
+      if (nodeType === "sceneHeading" || nodeType === "heading" || dataType === "scene-heading") {
+        return `<h2 data-type="scene-heading">${text}</h2>`;
       }
-      return `<p data-type="${dataType}">${text}</p>`;
+      if (nodeType === "character" || dataType === "character") {
+        return `<p data-type="character">${text}</p>`;
+      }
+      if (nodeType === "dialogue" || dataType === "dialogue") {
+        return `<p data-type="dialogue">${text}</p>`;
+      }
+      if (nodeType === "parenthetical" || dataType === "parenthetical") {
+        return `<p data-type="parenthetical">${text}</p>`;
+      }
+      if (nodeType === "transition" || dataType === "transition") {
+        return `<p data-type="transition">${text}</p>`;
+      }
+      if (nodeType === "shot" || dataType === "shot") {
+        return `<p data-type="shot">${text}</p>`;
+      }
+      return `<p data-type="action">${text}</p>`;
     })
     .join("\n");
 }
@@ -173,7 +192,7 @@ export function htmlToTipTapJson(html: string): TipTapDocumentJSON {
       type: "doc",
       content: [
         {
-          type: "paragraph",
+          type: "action",
           attrs: { dataType: "action" },
           content: [{ type: "text", text: "" }],
         },
@@ -190,7 +209,7 @@ export function htmlToTipTapJson(html: string): TipTapDocumentJSON {
       type: "doc",
       content: [
         {
-          type: "paragraph",
+          type: "action",
           attrs: { dataType: "action" },
           content: [{ type: "text", text: html }],
         },
@@ -201,18 +220,26 @@ export function htmlToTipTapJson(html: string): TipTapDocumentJSON {
   const nodes = children.map((el) => {
     const text = el.textContent || "";
     const dataType =
-      el.getAttribute("data-type") || (el.tagName === "H2" ? "scene-heading" : "action");
+      el.getAttribute("data-type") ||
+      (el.tagName === "H2" || el.tagName === "H1" || el.tagName === "H3" ? "scene-heading" : "action");
 
-    if (el.tagName === "H2") {
-      return {
-        type: "heading",
-        attrs: { level: 2, dataType: "scene-heading" },
-        content: text ? [{ type: "text", text }] : [],
-      };
+    let nodeType = "action";
+    if (dataType === "scene-heading" || el.tagName === "H2") {
+      nodeType = "sceneHeading";
+    } else if (dataType === "character") {
+      nodeType = "character";
+    } else if (dataType === "dialogue") {
+      nodeType = "dialogue";
+    } else if (dataType === "parenthetical") {
+      nodeType = "parenthetical";
+    } else if (dataType === "transition") {
+      nodeType = "transition";
+    } else if (dataType === "shot") {
+      nodeType = "shot";
     }
 
     return {
-      type: "paragraph",
+      type: nodeType,
       attrs: { dataType },
       content: text ? [{ type: "text", text }] : [],
     };
@@ -220,6 +247,7 @@ export function htmlToTipTapJson(html: string): TipTapDocumentJSON {
 
   return {
     type: "doc",
-    content: nodes.length > 0 ? nodes : [{ type: "paragraph", attrs: { dataType: "action" }, content: [] }],
+    content:
+      nodes.length > 0 ? nodes : [{ type: "action", attrs: { dataType: "action" }, content: [] }],
   };
 }
