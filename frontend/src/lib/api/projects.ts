@@ -67,6 +67,10 @@ export const projectsApi = {
     return apiClient<ProjectDetailResponse>(`/projects/${id}`);
   },
 
+  async getDefaultScreenplay(id: string): Promise<any> {
+    return apiClient(`/projects/${id}/screenplay`);
+  },
+
   async updateProject(id: string, data: UpdateProjectRequest): Promise<ProjectResponse> {
     return apiClient<ProjectResponse>(`/projects/${id}`, {
       method: "PATCH",

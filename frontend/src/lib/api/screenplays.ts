@@ -80,6 +80,10 @@ export interface EncryptedKeyMetadata {
 }
 
 export const screenplaysApi = {
+  async getDefaultScreenplay(projectId: string): Promise<ScreenplayDetailResponse> {
+    return apiClient<ScreenplayDetailResponse>(`/projects/${projectId}/screenplay`);
+  },
+
   async listScreenplays(projectId: string): Promise<ScreenplayResponse[]> {
     const data = await apiClient<ScreenplayResponse[]>(`/projects/${projectId}/screenplays`);
     return data || [];

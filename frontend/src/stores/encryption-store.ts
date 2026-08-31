@@ -17,6 +17,8 @@ import {
   generateScreenplayContentKey,
   wrapScreenplayKeyWithPEK,
   unwrapScreenplayKeyWithPEK,
+  wrapScreenplayContentKeyWithUEK,
+  unwrapScreenplayContentKeyWithUEK,
   wrapScreenplayContentKey,
   unwrapScreenplayContentKey,
   generateUserIdentityKeyPair,

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { Project, SceneItem } from "@/types/screenplay";
 import { useUpdateProjectMutation } from "@/hooks/use-projects";
+import { screenplaysApi, type ScreenplayDetailResponse } from "@/lib/api/screenplays";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import {
   parseEncryptedPayloadString,
@@ -88,7 +89,13 @@ function extractScenesFromHtml(html: string, fallbackScenes: SceneItem[]): Scene
 export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const updateProjectMutation = useUpdateProjectMutation(project.id);
   const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
-  const screenplayKey = useEncryptionStore((state) => state.screenplayKeys[project.id]);
+
+  const [screenplay, setScreenplay] = useState<ScreenplayDetailResponse | null>(null);
+  const [activeScreenplayId, setActiveScreenplayId] = useState<string>(project.id);
+  const [currentRevision, setCurrentRevision] = useState<number>(1);
+  const screenplayKey = useEncryptionStore(
+    (state) => state.screenplayKeys[activeScreenplayId] || state.screenplayKeys[project.id]
+  );
 
   const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [zenMode, setZenMode] = useState(false);
@@ -120,6 +127,27 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     // If encrypted and not yet decrypted, show locked placeholder until unlocked
     return `<p data-type="action">🔒 Encrypted screenplay draft. Please unlock your encryption session to view and write.</p>`;
   }, [project.screenplayContent]);
+
+  // Load canonical screenplay details on mount
+  useEffect(() => {
+    let mounted = true;
+    screenplaysApi
+      .getDefaultScreenplay(project.id)
+      .then((sp) => {
+        if (!mounted || !sp) return;
+        setScreenplay(sp);
+        setActiveScreenplayId(sp.id);
+        if (sp.revision) {
+          setCurrentRevision(sp.revision);
+        }
+      })
+      .catch((err) => {
+        console.debug("Default screenplay lookup:", err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [project.id]);
 
   // Initialize TipTap editor with semantic screenplay nodes and pagination
   const editor = useEditor({
@@ -168,7 +196,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       const words = text.trim() ? text.trim().split(/\s+/).length : 0;
       setStats((prev) => ({ ...prev, wordCount: words }));
 
-      // Debounce autosave to backend & encryption
+      // Debounce autosave to dedicated screenplay content endpoints
       setSaveStatus("saving");
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
@@ -176,22 +204,41 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
       saveTimeoutRef.current = setTimeout(async () => {
         try {
-          let payloadToSave = html;
+          const targetId = activeScreenplayId || project.id;
+          let nextRevision = currentRevision;
+
           if (screenplayKey) {
             const json = currentEditor.getJSON() as TipTapDocumentJSON;
-            const encrypted = await encryptScreenplayContent(json, screenplayKey);
-            payloadToSave = JSON.stringify(encrypted);
+            const res = await screenplaysApi.saveEncryptedContent(
+              targetId,
+              json,
+              screenplayKey,
+              currentRevision
+            );
+            if (res && res.revision) {
+              nextRevision = res.revision;
+            }
+          } else {
+            const res = await screenplaysApi.saveContent(targetId, {
+              content: html,
+              revision: currentRevision,
+            });
+            if (res && res.revision) {
+              nextRevision = res.revision;
+            }
           }
 
-          await updateProjectMutation.mutateAsync({
+          setCurrentRevision(nextRevision);
+          setSaveStatus("saved");
+          setLastSaved(new Date());
+
+          // Non-blocking project metadata sync
+          updateProjectMutation.mutate({
             id: project.id,
             data: {
-              screenplayContent: payloadToSave,
               lastEditedScene: dynamicScenes[0]?.slugline || "INT. OPENING SCENE - DAY",
             },
           });
-          setSaveStatus("saved");
-          setLastSaved(new Date());
         } catch (err) {
           console.error("Autosave failed:", err);
           setSaveStatus("saved");
@@ -216,28 +263,38 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   // Attempt to load metadata and decrypt on mount
   useEffect(() => {
     const isEncrypted = !!parseEncryptedPayloadString(project.screenplayContent);
-    
-    useEncryptionStore.getState().fetchUserMetadata().then(() => {
-      if (isEncrypted && !isUnlocked) {
-        setEncryptionDialogOpen(true);
-      }
-    });
+
+    useEncryptionStore
+      .getState()
+      .fetchUserMetadata()
+      .then(() => {
+        if (isEncrypted && !isUnlocked) {
+          setEncryptionDialogOpen(true);
+        }
+      });
   }, [project.screenplayContent, isUnlocked]);
 
-  // When unlocked, load the wrapped key for this project if not already in memory
+  // When unlocked, load the wrapped key for this screenplay if not already in memory
   useEffect(() => {
     if (isUnlocked && !screenplayKey) {
-      useEncryptionStore.getState().loadAndUnlockScreenplayKey(project.id, project.id).catch((err) => {
-        console.debug("No existing wrapped key found or unable to unwrap:", err);
-      });
+      const targetId = activeScreenplayId || project.id;
+      useEncryptionStore
+        .getState()
+        .loadAndUnlockScreenplayKey(targetId, project.id)
+        .catch((err) => {
+          console.debug("No existing wrapped key found or unable to unwrap:", err);
+        });
     }
-  }, [isUnlocked, screenplayKey, project.id]);
+  }, [isUnlocked, screenplayKey, activeScreenplayId, project.id]);
 
   // Decrypt content when key becomes available in memory and unlock editor
   useEffect(() => {
     if (!editor || !screenplayKey) return;
 
-    const parsedPayload = parseEncryptedPayloadString(project.screenplayContent);
+    const rawContent = screenplay?.content || project.screenplayContent;
+    const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+    const parsedPayload = parseEncryptedPayloadString(contentStr);
+
     if (parsedPayload) {
       decryptScreenplayContent(parsedPayload, screenplayKey)
         .then((doc) => {
@@ -251,7 +308,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     } else {
       editor.setEditable(true);
     }
-  }, [editor, screenplayKey, project.screenplayContent]);
+  }, [editor, screenplayKey, screenplay, project.screenplayContent]);
 
   // Handle format element buttons with semantic TipTap nodes
   const handleSetElementType = useCallback(
@@ -460,13 +517,17 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         onOpenChange={setEncryptionDialogOpen}
         mode={useEncryptionStore.getState().userMetadata ? "unlock" : "setup"}
         onSuccess={async () => {
-          let key = useEncryptionStore.getState().screenplayKeys[project.id];
+          const targetId = activeScreenplayId || project.id;
+          let key =
+            useEncryptionStore.getState().screenplayKeys[targetId] ||
+            useEncryptionStore.getState().screenplayKeys[project.id];
           if (!key) {
             try {
-              key = await useEncryptionStore.getState().loadAndUnlockScreenplayKey(project.id);
+              key = await useEncryptionStore.getState().loadAndUnlockScreenplayKey(targetId, project.id);
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message.toLowerCase() : "";
-              const statusCode = (err as { statusCode?: number })?.statusCode || (err as { status?: number })?.status;
+              const statusCode =
+                (err as { statusCode?: number })?.statusCode || (err as { status?: number })?.status;
               const code = (err as { code?: string })?.code;
               if (
                 statusCode === 404 ||
@@ -476,7 +537,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                 msg.includes("not found") ||
                 msg.includes("screenplay key not found")
               ) {
-                const res = await useEncryptionStore.getState().createAndWrapScreenplayKey(project.id);
+                const res = await useEncryptionStore.getState().createAndWrapScreenplayKey(targetId);
                 key = res.sck;
               } else {
                 throw err;
@@ -485,8 +546,9 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           }
 
           if (key && editor) {
-            const currentContent = project.screenplayContent;
-            const parsed = parseEncryptedPayloadString(currentContent);
+            const rawContent = screenplay?.content || project.screenplayContent;
+            const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+            const parsed = parseEncryptedPayloadString(contentStr);
             if (parsed) {
               const decryptedDoc = await decryptScreenplayContent(parsed, key);
               const normalized = normalizeScreenplayDoc(decryptedDoc);
@@ -494,13 +556,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
               editor.setEditable(true);
             } else {
               const json = editor.getJSON() as TipTapDocumentJSON;
-              const encrypted = await encryptScreenplayContent(json, key);
-              await updateProjectMutation.mutateAsync({
-                id: project.id,
-                data: {
-                  screenplayContent: JSON.stringify(encrypted),
-                },
-              });
+              const res = await screenplaysApi.saveEncryptedContent(targetId, json, key, currentRevision);
+              if (res && res.revision) {
+                setCurrentRevision(res.revision);
+              }
             }
           }
         }}
