@@ -440,3 +440,127 @@ func TestEncryptedVersionHistoryAndRestore(t *testing.T) {
 		t.Errorf("expected restored content to be encrypted with new revision 10, got %+v", restored)
 	}
 }
+
+func TestScreenplayKeyLifecycleAndIsolation(t *testing.T) {
+	ctx := context.Background()
+	ownerID := uuid.New()
+	projectID := uuid.New()
+	screenplay1ID := uuid.New()
+	screenplay2ID := uuid.New()
+
+	valid12ByteIV := base64.StdEncoding.EncodeToString([]byte("123456789012"))
+	keysStore := make(map[string]*model.ScreenplayKeyResponse)
+
+	repo := &mockScreenplayRepo{
+		getOwnershipFunc: func(ctx context.Context, sid, uid uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error) {
+			if uid == ownerID && (sid == screenplay1ID || sid == screenplay2ID) {
+				return &generated.GetScreenplayByIDAndUserIDRow{
+					ID:        pgtype.UUID{Bytes: sid, Valid: true},
+					ProjectID: pgtype.UUID{Bytes: projectID, Valid: true},
+					UserID:    pgtype.UUID{Bytes: uid, Valid: true},
+				}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+		getScreenplayKeyFunc: func(ctx context.Context, sid, uid uuid.UUID) (*model.ScreenplayKeyResponse, error) {
+			key, ok := keysStore[sid.String()]
+			if !ok {
+				return nil, model.ErrNotFound
+			}
+			return key, nil
+		},
+		upsertScreenplayKeyFunc: func(ctx context.Context, sid, uid uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error) {
+			resp := &model.ScreenplayKeyResponse{
+				ScreenplayID: sid,
+				Version:      version,
+				Algorithm:    algorithm,
+				IV:           keyIV,
+				WrappedKey:   wrappedKey,
+				CreatedAt:    time.Now(),
+				UpdatedAt:    time.Now(),
+			}
+			keysStore[sid.String()] = resp
+			return resp, nil
+		},
+		deleteScreenplayKeyFunc: func(ctx context.Context, sid, uid uuid.UUID) error {
+			delete(keysStore, sid.String())
+			return nil
+		},
+		deleteScreenplayFunc: func(ctx context.Context, sid uuid.UUID) error {
+			delete(keysStore, sid.String())
+			return nil
+		},
+	}
+
+	projRepo := &mockProjectRepoForScreenplay{
+		getByIDAndUserIDFunc: func(ctx context.Context, pid, uid uuid.UUID) (*generated.Project, error) {
+			if pid == projectID && uid == ownerID {
+				return &generated.Project{ID: pgtype.UUID{Bytes: projectID, Valid: true}}, nil
+			}
+			return nil, model.ErrNotFound
+		},
+	}
+
+	svc := NewScreenplayService(repo, projRepo)
+
+	validWrappedKey1 := base64.StdEncoding.EncodeToString([]byte("wrapped-sck-1-data-bytes-32-bytes"))
+	validWrappedKey2 := base64.StdEncoding.EncodeToString([]byte("wrapped-sck-2-distinct-32-bytes"))
+
+	// 1. Set key for Screenplay 1
+	key1Payload := model.WrappedKeyPayload{
+		Version:    1,
+		Algorithm:  "AES-GCM",
+		IV:         valid12ByteIV,
+		WrappedKey: validWrappedKey1,
+	}
+	saved1, err := svc.SetScreenplayKey(ctx, screenplay1ID, ownerID, key1Payload)
+	if err != nil {
+		t.Fatalf("failed to set key for screenplay 1: %v", err)
+	}
+	if saved1.WrappedKey != validWrappedKey1 {
+		t.Errorf("unexpected key data for screenplay 1: %+v", saved1)
+	}
+
+	// 2. Set distinct key for Screenplay 2 (Same project, isolated SCK)
+	key2Payload := model.WrappedKeyPayload{
+		Version:    1,
+		Algorithm:  "AES-GCM",
+		IV:         valid12ByteIV,
+		WrappedKey: validWrappedKey2,
+	}
+	saved2, err := svc.SetScreenplayKey(ctx, screenplay2ID, ownerID, key2Payload)
+	if err != nil {
+		t.Fatalf("failed to set key for screenplay 2: %v", err)
+	}
+	if saved2.WrappedKey != validWrappedKey2 {
+		t.Errorf("unexpected key data for screenplay 2: %+v", saved2)
+	}
+
+	// 3. Verify Screenplay 1 and Screenplay 2 keys are isolated
+	fetched1, err := svc.GetScreenplayKey(ctx, screenplay1ID, ownerID)
+	if err != nil {
+		t.Fatalf("failed to get key 1: %v", err)
+	}
+	fetched2, err := svc.GetScreenplayKey(ctx, screenplay2ID, ownerID)
+	if err != nil {
+		t.Fatalf("failed to get key 2: %v", err)
+	}
+	if fetched1.WrappedKey == fetched2.WrappedKey {
+		t.Errorf("screenplay keys must be isolated per screenplay, got duplicate: %s", fetched1.WrappedKey)
+	}
+
+	// 4. Delete Screenplay 1 -> Cleans up key 1 while preserving key 2
+	err = svc.DeleteScreenplay(ctx, screenplay1ID, ownerID)
+	if err != nil {
+		t.Fatalf("delete screenplay 1 failed: %v", err)
+	}
+	_, err = svc.GetScreenplayKey(ctx, screenplay1ID, ownerID)
+	if !errors.Is(err, model.ErrNotFound) {
+		t.Errorf("expected ErrNotFound for deleted screenplay key 1, got %v", err)
+	}
+	// Key 2 remains untouched
+	stillExists2, err := svc.GetScreenplayKey(ctx, screenplay2ID, ownerID)
+	if err != nil || stillExists2.WrappedKey != validWrappedKey2 {
+		t.Errorf("expected screenplay 2 key to remain intact, got %+v (err: %v)", stillExists2, err)
+	}
+}

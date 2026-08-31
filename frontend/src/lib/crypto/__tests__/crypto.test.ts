@@ -641,5 +641,41 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     }
   });
 
+  // 18. Multi-Screenplay Isolation: Distinct SCKs per screenplay in the same user / project context
+  await test("Multi-Screenplay Isolation: Screenplay 1 and Screenplay 2 maintain independent SCKs and cannot cross-decrypt", async () => {
+    const secret = "writer-multi-script-secret";
+    const salt = generateSalt(16);
+    const uek = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
+
+    // Generate independent SCKs for two distinct screenplays
+    const sck1 = await generateScreenplayContentKey();
+    const sck2 = await generateScreenplayContentKey();
+
+    const wrappedSCK1 = await wrapScreenplayContentKeyWithUEK(uek, sck1);
+    const wrappedSCK2 = await wrapScreenplayContentKeyWithUEK(uek, sck2);
+
+    if (wrappedSCK1.wrappedKey === wrappedSCK2.wrappedKey) {
+      throw new Error("Screenplay keys must be distinct and uniquely generated!");
+    }
+
+    const doc1: TipTapDocumentJSON = {
+      type: "doc",
+      content: [{ type: "sceneHeading", content: [{ type: "text", text: "INT. SCRIPT ONE - DAY" }] }],
+    };
+    const encrypted1 = await encryptScreenplayContent(doc1, sck1);
+
+    // Decrypting Screenplay 1 ciphertext using Screenplay 2 key MUST fail
+    let crossDecryptFailed = false;
+    try {
+      await decryptScreenplayContent(encrypted1, sck2);
+    } catch {
+      crossDecryptFailed = true;
+    }
+
+    if (!crossDecryptFailed) {
+      throw new Error("Cross-screenplay decryption should fail authentication tag check!");
+    }
+  });
+
   return results;
 }
