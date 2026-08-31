@@ -7,7 +7,7 @@ INSERT INTO users (
     bio,
     preferences
 ) VALUES (
-    $1, $2, $3, $4, $5, sqlc.arg(preferences)::jsonb
+    $1, $2, $3, $4, $5, sqlc.arg(preferences)::text::jsonb
 )
 RETURNING id, email, name, avatar_url, bio, preferences, created_at, updated_at;
 

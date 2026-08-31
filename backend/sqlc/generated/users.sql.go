@@ -20,7 +20,7 @@ INSERT INTO users (
     bio,
     preferences
 ) VALUES (
-    $1, $2, $3, $4, $5, $6::jsonb
+    $1, $2, $3, $4, $5, $6::text::jsonb
 )
 RETURNING id, email, name, avatar_url, bio, preferences, created_at, updated_at
 `
@@ -52,7 +52,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.Name,
 		arg.AvatarUrl,
 		arg.Bio,
-		arg.Preferences,
+		string(arg.Preferences),
 	)
 	var i CreateUserRow
 	err := row.Scan(
@@ -183,12 +183,16 @@ type UpdateUserProfileRow struct {
 }
 
 func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error) {
+	var prefArg interface{} = nil
+	if len(arg.Preferences) > 0 {
+		prefArg = string(arg.Preferences)
+	}
 	row := q.db.QueryRow(ctx, updateUserProfile,
 		arg.ID,
 		arg.Column2,
 		arg.Column3,
 		arg.Column4,
-		arg.Preferences,
+		prefArg,
 	)
 	var i UpdateUserProfileRow
 	err := row.Scan(
