@@ -28,6 +28,7 @@ import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
 import { ScreenplayToolbar } from "./screenplay-toolbar";
 import { SceneNavigator } from "./scene-navigator";
 import { ExportModal } from "./export-modal";
+import { ScreenplayAutocompletePopover } from "./screenplay-autocomplete";
 import {
   ScreenplayNodes,
   ScreenplayShortcuts,
@@ -420,6 +421,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             }}
           >
             <EditorContent editor={editor} />
+            <ScreenplayAutocompletePopover editor={editor} />
           </div>
         </main>
       </div>
