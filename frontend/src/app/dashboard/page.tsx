@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, Film } from "lucide-react";
 import { useProjectsQuery } from "@/hooks/use-projects";
 import { useAuth } from "@/hooks/use-auth";
+import { useEncryptionStore } from "@/stores/encryption-store";
 import { MainNav } from "@/components/navigation/main-nav";
 import { ProjectCard } from "@/components/dashboard/project-card";
 import { CreateProjectModal } from "@/components/modals/create-project-modal";
+import { EncryptionBanner } from "@/components/crypto/encryption-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +22,14 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
   const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  const fetchUserMetadata = useEncryptionStore((state) => state.fetchUserMetadata);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchUserMetadata().catch(() => {});
+    }
+  }, [isAuthenticated, fetchUserMetadata]);
 
   // If still checking auth or unauthenticated, don't render protected UI before redirect
   if (isAuthLoading || !isAuthenticated) {
@@ -87,6 +97,9 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
+
+        {/* Zero-Knowledge Encryption Status & Onboarding Banner */}
+        <EncryptionBanner />
 
         {/* Controls: Search & Filter Tabs */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">

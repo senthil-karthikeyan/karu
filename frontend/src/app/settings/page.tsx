@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { User, Shield, Sliders, Save, Check, Loader2 } from "lucide-react";
+import { User, Shield, Sliders, Save, Check, Loader2, Lock, KeyRound, Download, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useUserProfileQuery, useUpdateUserProfileMutation } from "@/hooks/use-user";
 import { useAuth } from "@/hooks/use-auth";
+import { useEncryptionStore } from "@/stores/encryption-store";
+import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
+import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
+import { generateEmergencyRecoveryKey, downloadRecoveryKit } from "@/lib/crypto/recovery";
 import { MainNav } from "@/components/navigation/main-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +32,17 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+
+  const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
+  const userMetadata = useEncryptionStore((state) => state.userMetadata);
+  const fetchUserMetadata = useEncryptionStore((state) => state.fetchUserMetadata);
+
+  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
+  const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetchUserMetadata().catch(() => {});
+  }, [fetchUserMetadata]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,13 +282,105 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
       </TabsContent>
 
       {/* Security Tab */}
-      <TabsContent value="security">
+      <TabsContent value="security" className="space-y-6">
+        {/* Zero-Knowledge End-to-End Encryption Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-primary" />
+                  Zero-Knowledge End-to-End Encryption (E2EE)
+                </CardTitle>
+                <CardDescription>
+                  Client-side AES-256-GCM encryption ensures only you can decrypt your screenplay drafts.
+                </CardDescription>
+              </div>
+              <div>
+                {isUnlocked ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Unlocked &amp; Active
+                  </span>
+                ) : userMetadata ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    Session Locked
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
+                    <KeyRound className="w-3.5 h-3.5" />
+                    Not Configured
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg border text-xs">
+              <div>
+                <p className="text-muted-foreground">Cipher Algorithm</p>
+                <p className="font-semibold text-foreground">AES-256-GCM (128-bit Auth Tag)</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Key Derivation</p>
+                <p className="font-semibold text-foreground">PBKDF2-SHA256 (600,000 rounds)</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Identity Architecture</p>
+                <p className="font-semibold text-foreground">ECDH P-256 (Zero-Knowledge)</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              {!userMetadata ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setOnboardingModalOpen(true)}
+                  className="text-xs gap-1.5"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Enable Zero-Knowledge Encryption
+                </Button>
+              ) : !isUnlocked ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setUnlockModalOpen(true)}
+                  className="text-xs gap-1.5"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  Unlock Encryption Session
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const sampleKey = generateEmergencyRecoveryKey();
+                    downloadRecoveryKit(sampleKey, user.email);
+                    toast.success("Emergency Recovery Kit downloaded!");
+                  }}
+                  className="text-xs gap-1.5"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Emergency Recovery Kit (.txt)
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Account Password Section */}
         <form onSubmit={handleUpdatePassword}>
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Security &amp; Password</CardTitle>
+              <CardTitle className="text-lg font-semibold">Account Password</CardTitle>
               <CardDescription>
-                Change your password and manage session credentials.
+                Update your login password and account credentials.
               </CardDescription>
             </CardHeader>
 
@@ -311,6 +418,21 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
             </CardFooter>
           </Card>
         </form>
+
+        <EncryptionOnboardingModal
+          open={onboardingModalOpen}
+          onOpenChange={setOnboardingModalOpen}
+          onSuccess={() => {
+            fetchUserMetadata();
+          }}
+        />
+
+        <EncryptionDialog
+          open={unlockModalOpen}
+          onOpenChange={setUnlockModalOpen}
+          mode="unlock"
+          userMetadata={userMetadata}
+        />
       </TabsContent>
     </Tabs>
   );

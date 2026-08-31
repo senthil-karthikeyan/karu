@@ -8,3 +8,4 @@ export * from "./key-derivation";
 export * from "./aes-gcm";
 export * from "./key-manager";
 export * from "./screenplay-encryption";
+export * from "./recovery";
