@@ -458,6 +458,8 @@ export const ScreenplayShortcuts = Extension.create({
 
       Enter: () => {
         const currentType = getActiveScreenplayType(this.editor);
+        const { $anchor } = this.editor.state.selection;
+        const textInCurrentBlock = $anchor.parent.textContent.trim();
 
         if (currentType === "scene-heading" || currentType === "sceneHeading") {
           this.editor.chain().splitBlock().setNode("action").run();
@@ -465,21 +467,35 @@ export const ScreenplayShortcuts = Extension.create({
         }
 
         if (currentType === "character") {
+          if (textInCurrentBlock.length === 0) {
+            // Empty character block -> convert to action
+            this.editor.chain().focus().setNode("action").run();
+            return true;
+          }
           this.editor.chain().splitBlock().setNode("dialogue").run();
           return true;
         }
+
         if (currentType === "parenthetical") {
           this.editor.chain().splitBlock().setNode("dialogue").run();
           return true;
         }
+
         if (currentType === "dialogue") {
+          if (textInCurrentBlock.length === 0) {
+            // Empty dialogue line on double enter -> convert to action
+            this.editor.chain().focus().setNode("action").run();
+            return true;
+          }
           this.editor.chain().splitBlock().setNode("action").run();
           return true;
         }
+
         if (currentType === "transition") {
           this.editor.chain().splitBlock().setNode("sceneHeading").run();
           return true;
         }
+
         if (currentType === "shot") {
           this.editor.chain().splitBlock().setNode("action").run();
           return true;
@@ -487,6 +503,32 @@ export const ScreenplayShortcuts = Extension.create({
 
         return false;
       },
+
+      Backspace: () => {
+        const { empty, $anchor } = this.editor.state.selection;
+        if (!empty) return false;
+
+        const currentType = getActiveScreenplayType(this.editor);
+        const isStartOfBlock = $anchor.parentOffset === 0;
+        const isBlockEmpty = $anchor.parent.textContent.length === 0;
+
+        // If backspacing on an empty specialized block, reset to action first
+        if (isStartOfBlock && isBlockEmpty && currentType !== "action") {
+          this.editor.chain().focus().setNode("action").run();
+          return true;
+        }
+
+        return false;
+      },
+
+      // Fast formatting shortcuts (Mod-Alt-1 to Mod-Alt-7)
+      "Mod-Alt-1": () => this.editor.chain().focus().setNode("sceneHeading").run(),
+      "Mod-Alt-2": () => this.editor.chain().focus().setNode("action").run(),
+      "Mod-Alt-3": () => this.editor.chain().focus().setNode("character").run(),
+      "Mod-Alt-4": () => this.editor.chain().focus().setNode("dialogue").run(),
+      "Mod-Alt-5": () => this.editor.chain().focus().setNode("parenthetical").run(),
+      "Mod-Alt-6": () => this.editor.chain().focus().setNode("transition").run(),
+      "Mod-Alt-7": () => this.editor.chain().focus().setNode("shot").run(),
     };
   },
 });
