@@ -344,6 +344,15 @@ func (m *mockProjectRepoForScreenplay) UpdateContent(ctx context.Context, id, us
 func (m *mockProjectRepoForScreenplay) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	return nil
 }
+func (m *mockProjectRepoForScreenplay) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
+	return nil, model.ErrNotFound
+}
+func (m *mockProjectRepoForScreenplay) UpsertProjectKey(ctx context.Context, projectID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ProjectKeyResponse, error) {
+	return nil, nil
+}
+func (m *mockProjectRepoForScreenplay) DeleteProjectKey(ctx context.Context, projectID, userID uuid.UUID) error {
+	return nil
+}
 
 // -------------------------------------------------------------
 // TESTS

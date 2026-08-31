@@ -48,6 +48,18 @@ type Project struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ProjectKey struct {
+	ID         pgtype.UUID        `json:"id"`
+	ProjectID  pgtype.UUID        `json:"project_id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	WrappedKey string             `json:"wrapped_key"`
+	KeyIv      string             `json:"key_iv"`
+	Algorithm  string             `json:"algorithm"`
+	Version    int32              `json:"version"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RefreshToken struct {
 	ID         pgtype.UUID        `json:"id"`
 	UserID     pgtype.UUID        `json:"user_id"`

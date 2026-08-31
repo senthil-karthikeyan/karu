@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Film, Sparkles, Image as ImageIcon } from "lucide-react";
 import { useCreateProjectMutation } from "@/hooks/use-projects";
+import { useEncryptionStore } from "@/stores/encryption-store";
 import type { Genre, ProjectFormat } from "@/types/screenplay";
 import {
   Dialog,
@@ -114,6 +115,16 @@ export function CreateProjectModal({
         synopsis: synopsis.trim(),
         coverImage: selectedPoster,
       });
+
+      // Initialize Project Encryption Key (PEK) if user encryption session is active
+      const { isUnlocked, createAndWrapProjectKey } = useEncryptionStore.getState();
+      if (isUnlocked) {
+        try {
+          await createAndWrapProjectKey(newProject.id);
+        } catch (encErr) {
+          console.warn("Could not wrap project key upon creation:", encErr);
+        }
+      }
 
       toast.success("Project created successfully!", {
         description: `"${newProject.title}" workspace is ready.`,

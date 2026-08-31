@@ -23,6 +23,10 @@ type ProjectService interface {
 	DeleteScene(ctx context.Context, projectID, sceneID, userID uuid.UUID) error
 
 	ListActivities(ctx context.Context, projectID, userID uuid.UUID) ([]model.ActivityItem, error)
+
+	// Project Encryption Keys (PEK)
+	GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error)
+	SetProjectKey(ctx context.Context, projectID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ProjectKeyResponse, error)
 }
 
 type projectService struct {
@@ -262,4 +266,36 @@ func (s *projectService) ListActivities(ctx context.Context, projectID, userID u
 		return nil, err
 	}
 	return s.activityRepo.ListByProjectID(ctx, projectID)
+}
+
+func (s *projectService) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
+	_, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.projectRepo.GetProjectKey(ctx, projectID, userID)
+}
+
+func (s *projectService) SetProjectKey(ctx context.Context, projectID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ProjectKeyResponse, error) {
+	_, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := model.ValidateWrappedKeyPayload(req); err != nil {
+		return nil, err
+	}
+
+	algo := req.Algorithm
+	if algo == "" {
+		algo = model.ExpectedEncryptionAlgorithm
+	}
+
+	version := req.Version
+	if version == 0 {
+		version = model.ExpectedEncryptionVersion
+	}
+
+	return s.projectRepo.UpsertProjectKey(ctx, projectID, userID, req.WrappedKey, req.IV, algo, version)
 }

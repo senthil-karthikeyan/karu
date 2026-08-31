@@ -282,3 +282,55 @@ func (h *ProjectHandler) ListActivities(c *gin.Context) {
 
 	model.SendSuccess(c, http.StatusOK, activities)
 }
+
+// GetProjectKey returns the wrapped Project Encryption Key (PEK) for the authenticated user.
+func (h *ProjectHandler) GetProjectKey(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	projectID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	key, err := h.projectService.GetProjectKey(c.Request.Context(), projectID, userID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, key)
+}
+
+// SetProjectKey saves or updates the wrapped Project Encryption Key (PEK).
+func (h *ProjectHandler) SetProjectKey(c *gin.Context) {
+	userID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	projectID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	var req model.WrappedKeyPayload
+	if err := c.ShouldBindJSON(&req); err != nil {
+		model.SendError(c, model.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusUnprocessableEntity, err))
+		return
+	}
+
+	key, err := h.projectService.SetProjectKey(c.Request.Context(), projectID, userID, req)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, key)
+}
