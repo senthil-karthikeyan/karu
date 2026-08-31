@@ -1,10 +1,11 @@
-import { Node, Extension } from "@tiptap/react";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Node, Extension, textblockTypeInputRule } from "@tiptap/react";
+import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { TipTapDocumentJSON } from "@/lib/crypto/crypto-types";
 
 export const screenplayPaginationPluginKey = new PluginKey("screenplayPagination");
+export const screenplayAutoFormattingPluginKey = new PluginKey("screenplayAutoFormatting");
 
 /**
  * Semantic Node: SceneHeading
@@ -327,6 +328,89 @@ export function normalizeScreenplayDoc(doc: TipTapDocumentJSON): TipTapDocumentJ
 }
 
 /**
+ * Automatic Screenplay Formatting Extension:
+ * - Enforces uppercase text transformations in document state for SceneHeading, Character, Transition, Shot
+ * - Provides Fountain / smart input rules (INT., EXT., CUT TO:, @, ., >)
+ */
+export const ScreenplayAutoFormatting = Extension.create({
+  name: "screenplayAutoFormatting",
+
+  addInputRules() {
+    const nodes = this.editor.schema.nodes;
+
+    return [
+      // Scene Heading input rules (e.g. typing "INT. " or "EXT. " or ".")
+      textblockTypeInputRule({
+        find: /^(?:INT\.|EXT\.|INT\/EXT\.|I\/E\.)\s$/i,
+        type: nodes.sceneHeading,
+      }),
+      textblockTypeInputRule({
+        find: /^\.\s$/,
+        type: nodes.sceneHeading,
+      }),
+      // Transition input rules (e.g. typing "CUT TO: " or "> ")
+      textblockTypeInputRule({
+        find: /^(?:CUT TO|FADE IN|FADE OUT|SMASH CUT TO|DISSOLVE TO):?\s$/i,
+        type: nodes.transition,
+      }),
+      textblockTypeInputRule({
+        find: /^>\s$/,
+        type: nodes.transition,
+      }),
+      // Character input rule (e.g. typing "@ ")
+      textblockTypeInputRule({
+        find: /^@\s$/,
+        type: nodes.character,
+      }),
+      // Shot input rule (e.g. typing "CLOSE ON ")
+      textblockTypeInputRule({
+        find: /^(?:CLOSE ON|ANGLE ON|WIDE SHOT|POV|INSERT|ESTABLISHING):?\s$/i,
+        type: nodes.shot,
+      }),
+    ];
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: screenplayAutoFormattingPluginKey,
+        appendTransaction(transactions, _oldState, newState) {
+          const docChanged = transactions.some((tr) => tr.docChanged);
+          if (!docChanged) return null;
+
+          let tr: Transaction | null = null;
+
+          newState.doc.descendants((node, pos) => {
+            const typeName = node.type.name;
+            const isUppercaseType =
+              typeName === "character" ||
+              typeName === "sceneHeading" ||
+              typeName === "transition" ||
+              typeName === "shot";
+
+            if (isUppercaseType && node.isTextblock) {
+              node.forEach((child, offset) => {
+                if (child.isText && child.text) {
+                  const upperText = child.text.toUpperCase();
+                  if (child.text !== upperText) {
+                    if (!tr) tr = newState.tr;
+                    const from = pos + 1 + offset;
+                    const to = from + child.text.length;
+                    tr.replaceWith(from, to, newState.schema.text(upperText, child.marks));
+                  }
+                }
+              });
+            }
+          });
+
+          return tr;
+        },
+      }),
+    ];
+  },
+});
+
+/**
  * Keyboard shortcuts extension for screenplay writing
  */
 export const ScreenplayShortcuts = Extension.create({
@@ -409,7 +493,7 @@ export const ScreenplayShortcuts = Extension.create({
 
 export function estimateBlockHeight(node: PMNode): number {
   const type =
-    (node.attrs.dataType as string) ||
+    (node.attrs?.dataType as string) ||
     (node.type.name === "sceneHeading" || node.type.name === "heading"
       ? "scene-heading"
       : node.type.name || "action");

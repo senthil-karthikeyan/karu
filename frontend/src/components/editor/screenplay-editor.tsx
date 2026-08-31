@@ -31,6 +31,7 @@ import { ExportModal } from "./export-modal";
 import {
   ScreenplayNodes,
   ScreenplayShortcuts,
+  ScreenplayAutoFormatting,
   ScreenplayPagination,
   normalizeScreenplayDoc,
 } from "./screenplay-extensions";
@@ -125,6 +126,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         heading: false,
       }),
       ...ScreenplayNodes,
+      ScreenplayAutoFormatting,
       ScreenplayShortcuts,
       ScreenplayPagination.configure({
         projectTitle: project.title,
