@@ -191,8 +191,54 @@ export const screenplaysApi = {
     });
   },
 
+  /**
+   * Client-side E2EE: Encrypts a version snapshot before persisting.
+   */
+  async createEncryptedVersion(
+    id: string,
+    title: string,
+    doc: TipTapDocumentJSON,
+    key: CryptoKey
+  ): Promise<ScreenplayVersionResponse> {
+    const encryptedPayload = await encryptScreenplayContent(doc, key);
+    return apiClient<ScreenplayVersionResponse>(`/screenplays/${id}/versions`, {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        content: JSON.stringify(encryptedPayload),
+      }),
+    });
+  },
+
   async getVersion(id: string, versionId: string): Promise<ScreenplayVersionResponse> {
     return apiClient<ScreenplayVersionResponse>(`/screenplays/${id}/versions/${versionId}`);
+  },
+
+  /**
+   * Client-side E2EE: Fetches a specific version snapshot and decrypts it into TipTap JSON.
+   */
+  async getDecryptedVersion(
+    id: string,
+    versionId: string,
+    key: CryptoKey
+  ): Promise<{ version: ScreenplayVersionResponse; doc: TipTapDocumentJSON }> {
+    const version = await this.getVersion(id, versionId);
+    const parsedPayload = parseEncryptedPayloadString(version.content);
+    if (parsedPayload) {
+      const doc = await decryptScreenplayContent(parsedPayload, key);
+      return { version, doc };
+    }
+
+    try {
+      const parsed = JSON.parse(version.content);
+      if (parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).type === "doc") {
+        return { version, doc: parsed as TipTapDocumentJSON };
+      }
+    } catch {
+      // Plaintext fallback
+    }
+
+    throw new Error("Unable to decrypt version: content format is unrecognized or corrupted.");
   },
 
   async restoreVersion(id: string, versionId: string): Promise<RestoreVersionResponse> {
