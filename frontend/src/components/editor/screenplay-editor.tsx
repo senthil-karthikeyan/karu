@@ -37,6 +37,7 @@ import {
   ScreenplayPasteHandler,
   ScreenplayPagination,
   normalizeScreenplayDoc,
+  getActiveScreenplayType,
 } from "./screenplay-extensions";
 import type { ScreenplayElementType } from "@/types/screenplay";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const screenplayKey = useEncryptionStore((state) => state.screenplayKeys[project.id]);
 
   const [navigatorOpen, setNavigatorOpen] = useState(true);
+  const [zenMode, setZenMode] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
   const [lastSaved, setLastSaved] = useState<Date>(new Date(project.updatedAt));
   const [exportModalOpen, setExportModalOpen] = useState(false);
@@ -158,67 +160,58 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         return;
       }
 
-      setSaveStatus("saving");
-
       const html = currentEditor.getHTML();
-      const json = currentEditor.getJSON() as TipTapDocumentJSON;
-      const text = currentEditor.getText();
       setCurrentHtml(html);
 
-      // Calculate stats
+      // Compute word count
+      const text = currentEditor.getText();
       const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-      const headingMatches = html.match(/<h2/gi) || [];
-      const scenesCount = Math.max(1, headingMatches.length);
+      setStats((prev) => ({ ...prev, wordCount: words }));
 
-      setStats((prev) => ({
-        ...prev,
-        wordCount: words,
-        sceneCount: scenesCount,
-      }));
-
-      // Debounced auto-save
+      // Debounce autosave to backend & encryption
+      setSaveStatus("saving");
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
 
       saveTimeoutRef.current = setTimeout(async () => {
         try {
-          const firstSlugline = dynamicScenes[0]?.slugline || "INT. OPENING SCENE - DAY";
           let payloadToSave = html;
-
-          // Always get or derive the in-memory SCK from the cryptographic store (3-tier PEK hierarchy)
-          const store = useEncryptionStore.getState();
-          let currentKey = store.screenplayKeys[project.id];
-          if (!currentKey && store.isUnlocked) {
-            try {
-              const created = await store.createAndWrapScreenplayKey(project.id, project.id);
-              currentKey = created.sck;
-            } catch (kErr) {
-              console.warn("Could not derive or wrap screenplay key during save:", kErr);
-            }
-          }
-
-          if (currentKey) {
-            const encryptedPayload = await encryptScreenplayContent(json, currentKey);
-            payloadToSave = JSON.stringify(encryptedPayload);
+          if (screenplayKey) {
+            const json = currentEditor.getJSON() as TipTapDocumentJSON;
+            const encrypted = await encryptScreenplayContent(json, screenplayKey);
+            payloadToSave = JSON.stringify(encrypted);
           }
 
           await updateProjectMutation.mutateAsync({
             id: project.id,
             data: {
               screenplayContent: payloadToSave,
-              lastEditedScene: firstSlugline,
+              lastEditedScene: dynamicScenes[0]?.slugline || "INT. OPENING SCENE - DAY",
             },
           });
           setSaveStatus("saved");
           setLastSaved(new Date());
-        } catch {
-          // If server is unreachable or fails, keep local state
+        } catch (err) {
+          console.error("Autosave failed:", err);
           setSaveStatus("saved");
         }
-      }, 1200);
+      }, 1000);
     },
   });
+
+  // Calculate word count from editor
+  const currentWordCount = useMemo(() => {
+    if (!editor) return stats.wordCount || 0;
+    const text = editor.getText();
+    return text.trim() ? text.trim().split(/\s+/).length : 0;
+  }, [editor, stats.wordCount]);
+
+  // Active element type
+  const activeElementType = useMemo(() => {
+    if (!editor) return "action";
+    return getActiveScreenplayType(editor);
+  }, [editor]);
 
   // Attempt to load metadata and decrypt on mount
   useEffect(() => {
@@ -322,89 +315,93 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-muted/30">
-      {/* Top Editor Bar */}
-      <header className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0 z-30">
-        {/* Left: Back & Project Title */}
-        <div className="flex items-center gap-3">
-          <Link href={`/projects/${project.id}`}>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs font-medium h-8">
-              <ArrowLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Overview</span>
-            </Button>
-          </Link>
+      {/* Top Editor Bar (Hidden in Zen Mode) */}
+      {!zenMode && (
+        <header className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0 z-30">
+          {/* Left: Back & Project Title */}
+          <div className="flex items-center gap-3">
+            <Link href={`/projects/${project.id}`}>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs font-medium h-8">
+                <ArrowLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Overview</span>
+              </Button>
+            </Link>
 
-          <div className="h-4 w-px bg-border" />
+            <div className="h-4 w-px bg-border" />
 
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm tracking-tight truncate max-w-[180px] sm:max-w-xs">
-              {project.title}
-            </span>
-            <div
-              id="e2ee-encryption-badge"
-              onClick={() => setEncryptionDialogOpen(true)}
-              className="cursor-pointer"
-            >
-              <EncryptionBadge screenplayId={project.id} />
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm tracking-tight truncate max-w-[180px] sm:max-w-xs">
+                {project.title}
+              </span>
+              <div
+                id="e2ee-encryption-badge"
+                onClick={() => setEncryptionDialogOpen(true)}
+                className="cursor-pointer"
+              >
+                <EncryptionBadge screenplayId={project.id} />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Center: Save status */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {saveStatus === "saving" ? (
-            <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
-              <CloudUpload className="h-3.5 w-3.5 animate-pulse" />
-              Saving...
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Saved
-            </span>
-          )}
-          <span className="text-[11px] text-muted-foreground hidden lg:inline">
-            • {formatRelativeTime(lastSaved.toISOString())}
-          </span>
-        </div>
-
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setNavigatorOpen(!navigatorOpen)}
-            className="h-8 w-8 p-0"
-            title={navigatorOpen ? "Hide scene navigator" : "Show scene navigator"}
-          >
-            {navigatorOpen ? (
-              <PanelLeftClose className="h-4 w-4" />
+          {/* Center: Save status */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {saveStatus === "saving" ? (
+              <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                <CloudUpload className="h-3.5 w-3.5 animate-pulse" />
+                Saving...
+              </span>
             ) : (
-              <PanelLeft className="h-4 w-4" />
+              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Saved
+              </span>
             )}
-          </Button>
+            <span className="text-[11px] text-muted-foreground hidden lg:inline">
+              • {formatRelativeTime(lastSaved.toISOString())}
+            </span>
+          </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setExportModalOpen(true)}
-            className="gap-1.5 text-xs font-medium h-8"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Export</span>
-          </Button>
-        </div>
-      </header>
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setNavigatorOpen(!navigatorOpen)}
+              className="h-8 w-8 p-0"
+              title={navigatorOpen ? "Hide scene navigator" : "Show scene navigator"}
+            >
+              {navigatorOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
+              )}
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setExportModalOpen(true)}
+              className="gap-1.5 text-xs font-medium h-8"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          </div>
+        </header>
+      )}
 
       {/* Formatting Toolbar */}
       <ScreenplayToolbar
         editor={editor}
         onSetElementType={handleSetElementType}
+        zenMode={zenMode}
+        onToggleZenMode={() => setZenMode((prev) => !prev)}
       />
 
       {/* Main Workspace: Navigator + Virtual Page Canvas */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Left Scene Navigator */}
-        {navigatorOpen && (
+        {/* Left Scene Navigator (Collapses in Zen Mode) */}
+        {navigatorOpen && !zenMode && (
           <SceneNavigator
             scenes={dynamicScenes}
             activeSceneId={activeSceneId}
@@ -425,6 +422,30 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           </div>
         </main>
       </div>
+
+      {/* Bottom Screenplay Telemetry Status Bar */}
+      <footer className="h-7 border-t border-border bg-background/95 backdrop-blur px-3 flex items-center justify-between text-[11px] text-muted-foreground z-20 select-none">
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-foreground">
+            Page {stats.pageCount || 1}
+          </span>
+          <span>•</span>
+          <span>{currentWordCount} words</span>
+          <span>•</span>
+          <span>{dynamicScenes.length} scenes</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="capitalize font-mono font-medium px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
+            {activeElementType.replace("-", " ")}
+          </span>
+          {isUnlocked && screenplayKey && (
+            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[10px]">
+              <span>🔒</span> E2EE Protected
+            </span>
+          )}
+        </div>
+      </footer>
 
       {/* Export Modal */}
       <ExportModal
