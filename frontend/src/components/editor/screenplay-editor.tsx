@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   CloudUpload,
   Download,
+  History,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
 import { ScreenplayToolbar } from "./screenplay-toolbar";
 import { SceneNavigator } from "./scene-navigator";
 import { ExportModal } from "./export-modal";
+import { VersionHistoryModal } from "./version-history-modal";
 import { ScreenplayAutocompletePopover } from "./screenplay-autocomplete";
 import {
   ScreenplayNodes,
@@ -102,6 +104,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving">("saved");
   const [lastSaved, setLastSaved] = useState<Date>(new Date(project.updatedAt));
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [currentHtml, setCurrentHtml] = useState<string>(project.screenplayContent);
   const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes[0]?.id);
@@ -437,6 +440,17 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setHistoryModalOpen(true)}
+              className="gap-1.5 text-xs font-medium h-8"
+              title="Version History & Checkpoints"
+            >
+              <History className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">History</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setExportModalOpen(true)}
               className="gap-1.5 text-xs font-medium h-8"
             >
@@ -509,6 +523,19 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
         project={project}
+      />
+
+      {/* Version History & Checkpoints Modal */}
+      <VersionHistoryModal
+        open={historyModalOpen}
+        onOpenChange={setHistoryModalOpen}
+        screenplayId={activeScreenplayId || project.id}
+        projectId={project.id}
+        editor={editor}
+        onVersionRestored={(newRev) => {
+          setCurrentRevision(newRev);
+          setLastSaved(new Date());
+        }}
       />
 
       {/* E2EE Setup / Unlock Modal */}
