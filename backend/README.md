@@ -168,16 +168,16 @@ Karu implements a multi-provider authentication system supporting both tradition
 
 ---
 
-## 🔐 Zero-Knowledge 3-Tier End-to-End Encryption (E2EE)
+## 🔐 Zero-Knowledge End-to-End Encryption (E2EE)
 
 The Go backend operates on a strict **Zero-Knowledge Principle**:
 
 1. **Zero Plaintext Exposure**: Screenplay content, revisions, and checkpoints exist only as AES-256-GCM ciphertext blobs with associated 12-byte IVs and 128-bit authentication tags.
 2. **Zero Key Knowledge**: The backend stores only wrapped keys:
+   - `user_encryption_metadata`: Stores salt & PBKDF2 iterations for client-side UEK derivation.
    - `user_encryption_identities`: Stores the user's public ECDH key (SPKI) and wrapped private key (PKCS#8 wrapped with UEK).
-   - `project_keys`: Stores the random `PEK` wrapped with the user's `UEK`.
-   - `screenplay_keys`: Stores the random `SCK` wrapped with the project's `PEK`.
-3. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies the historical encrypted payload directly into `screenplay_content` without server-side decryption.
+   - `screenplay_keys`: Stores the random Screenplay Content Key (`SCK`) directly wrapped with the user's `UEK` (Canonical 2-Tier Hierarchy: Passphrase -> UEK -> SCK -> Content).
+3. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies historical encrypted payloads directly into `screenplay_contents` without server-side decryption.
 
 ---
 
@@ -206,12 +206,17 @@ r.Use(middleware.CORS(deps.Config.CORS))
 
 ### Applied Database Migrations
 
-1. `000001_initial_schema`: Initial schema defining `users`, `projects`, `scenes`, and `activities`.
+1. `000001_initial_schema`: Initial schema defining users, projects, and activities.
 2. `000002_auth_identities_and_screenplays`: Adds `auth_identities`, `refresh_tokens`, `screenplays`, `screenplay_contents`, and `screenplay_versions`.
 3. `000003_e2ee_support`: Adds `user_encryption_metadata` (salt & PBKDF2 settings), `screenplay_keys` (wrapped SCKs), and extends `screenplay_contents` and `screenplay_versions` with ciphertext fields.
-4. `000004_e2ee_support`: Fixes foreign key constraints on `screenplay_keys` to allow project and screenplay ID bindings.
+4. `000004_e2ee_support`: Migration maintenance for E2EE fields.
 5. `000005_user_encryption_identities`: Adds `user_encryption_identities` table for ECDH P-256 asymmetric identity key storage.
-6. `000006_project_keys`: Adds `project_keys` table for Project Encryption Key (`PEK`) wrapping and storage.
+6. `000006_project_keys`: Legacy PEK table (subsequently deprecated and removed in migration 000010).
+7. `000007_unified_screenplay_schema`: Extends `screenplays` with `is_default` and `sort_order`.
+8. `000008_migrate_legacy_project_screenplays`: Migrated legacy `projects.screenplay_content` to `screenplay_contents`.
+9. `000009_cleanup_legacy_schema`: Adds covering indexes for revision and key queries.
+10. `000010_cleanup_legacy_screenplay_schema`: Drops deprecated `projects.screenplay_content`, `project_keys`, and `scenes` tables.
+11. `000011_enforce_screenplay_keys_fk`: Enforces `FOREIGN KEY (screenplay_id) REFERENCES screenplays(id) ON DELETE CASCADE` on `screenplay_keys`.
 
 ---
 
