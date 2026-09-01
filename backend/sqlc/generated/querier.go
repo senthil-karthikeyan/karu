@@ -53,6 +53,7 @@ type Querier interface {
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
 	UpdateScreenplay(ctx context.Context, arg UpdateScreenplayParams) (UpdateScreenplayRow, error)
 	UpdateScreenplayContentWithRevision(ctx context.Context, arg UpdateScreenplayContentWithRevisionParams) (UpdateScreenplayContentWithRevisionRow, error)
+	UpdateScreenplayStats(ctx context.Context, arg UpdateScreenplayStatsParams) (UpdateScreenplayStatsRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (UpdateUserPasswordRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error)
 	UpsertScreenplayKey(ctx context.Context, arg UpsertScreenplayKeyParams) (ScreenplayKey, error)

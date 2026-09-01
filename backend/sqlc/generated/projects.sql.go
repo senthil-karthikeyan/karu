@@ -20,30 +20,22 @@ INSERT INTO projects (
     format,
     status,
     synopsis,
-    cover_image,
-    page_count,
-    word_count,
-    scene_count,
-    last_edited_scene
+    cover_image
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
-RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, created_at, updated_at
 `
 
 type CreateProjectParams struct {
-	UserID          pgtype.UUID `json:"user_id"`
-	Title           string      `json:"title"`
-	Logline         string      `json:"logline"`
-	Genre           string      `json:"genre"`
-	Format          string      `json:"format"`
-	Status          string      `json:"status"`
-	Synopsis        string      `json:"synopsis"`
-	CoverImage      string      `json:"cover_image"`
-	PageCount       int32       `json:"page_count"`
-	WordCount       int32       `json:"word_count"`
-	SceneCount      int32       `json:"scene_count"`
-	LastEditedScene string      `json:"last_edited_scene"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Title      string      `json:"title"`
+	Logline    string      `json:"logline"`
+	Genre      string      `json:"genre"`
+	Format     string      `json:"format"`
+	Status     string      `json:"status"`
+	Synopsis   string      `json:"synopsis"`
+	CoverImage string      `json:"cover_image"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -56,10 +48,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.Status,
 		arg.Synopsis,
 		arg.CoverImage,
-		arg.PageCount,
-		arg.WordCount,
-		arg.SceneCount,
-		arg.LastEditedScene,
 	)
 	var i Project
 	err := row.Scan(
@@ -72,10 +60,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.PageCount,
-		&i.WordCount,
-		&i.SceneCount,
-		&i.LastEditedScene,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -98,7 +82,7 @@ func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) er
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, created_at, updated_at
 FROM projects
 WHERE id = $1
 `
@@ -116,10 +100,6 @@ func (q *Queries) GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, 
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.PageCount,
-		&i.WordCount,
-		&i.SceneCount,
-		&i.LastEditedScene,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -127,7 +107,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, 
 }
 
 const getProjectByIDAndUserID = `-- name: GetProjectByIDAndUserID :one
-SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, created_at, updated_at
 FROM projects
 WHERE id = $1 AND user_id = $2
 `
@@ -150,10 +130,6 @@ func (q *Queries) GetProjectByIDAndUserID(ctx context.Context, arg GetProjectByI
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.PageCount,
-		&i.WordCount,
-		&i.SceneCount,
-		&i.LastEditedScene,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -161,7 +137,7 @@ func (q *Queries) GetProjectByIDAndUserID(ctx context.Context, arg GetProjectByI
 }
 
 const listProjectsByUserID = `-- name: ListProjectsByUserID :many
-SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, created_at, updated_at
 FROM projects
 WHERE user_id = $1
 ORDER BY updated_at DESC
@@ -186,10 +162,6 @@ func (q *Queries) ListProjectsByUserID(ctx context.Context, userID pgtype.UUID) 
 			&i.Status,
 			&i.Synopsis,
 			&i.CoverImage,
-			&i.PageCount,
-			&i.WordCount,
-			&i.SceneCount,
-			&i.LastEditedScene,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -213,23 +185,21 @@ SET
     status = COALESCE(NULLIF($7, ''), status),
     synopsis = COALESCE($8, synopsis),
     cover_image = COALESCE($9, cover_image),
-    last_edited_scene = COALESCE($10, last_edited_scene),
     updated_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
-	ID              pgtype.UUID `json:"id"`
-	UserID          pgtype.UUID `json:"user_id"`
-	Column3         interface{} `json:"column_3"`
-	Logline         string      `json:"logline"`
-	Column5         interface{} `json:"column_5"`
-	Column6         interface{} `json:"column_6"`
-	Column7         interface{} `json:"column_7"`
-	Synopsis        string      `json:"synopsis"`
-	CoverImage      string      `json:"cover_image"`
-	LastEditedScene string      `json:"last_edited_scene"`
+	ID         pgtype.UUID `json:"id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Column3    interface{} `json:"column_3"`
+	Logline    string      `json:"logline"`
+	Column5    interface{} `json:"column_5"`
+	Column6    interface{} `json:"column_6"`
+	Column7    interface{} `json:"column_7"`
+	Synopsis   string      `json:"synopsis"`
+	CoverImage string      `json:"cover_image"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -243,7 +213,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Column7,
 		arg.Synopsis,
 		arg.CoverImage,
-		arg.LastEditedScene,
 	)
 	var i Project
 	err := row.Scan(
@@ -256,10 +225,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.PageCount,
-		&i.WordCount,
-		&i.SceneCount,
-		&i.LastEditedScene,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

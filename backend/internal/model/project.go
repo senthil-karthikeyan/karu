@@ -6,12 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type ProjectStats struct {
-	PageCount  int `json:"pageCount"`
-	WordCount  int `json:"wordCount"`
-	SceneCount int `json:"sceneCount"`
-}
-
 type SceneItem struct {
 	ID         uuid.UUID `json:"id"`
 	ProjectID  uuid.UUID `json:"projectId"`
@@ -37,19 +31,17 @@ type ActivityItem struct {
 }
 
 type ProjectResponse struct {
-	ID              uuid.UUID    `json:"id"`
-	UserID          uuid.UUID    `json:"userId"`
-	Title           string       `json:"title"`
-	Logline         string       `json:"logline"`
-	Genre           string       `json:"genre"`
-	Format          string       `json:"format"`
-	Status          string       `json:"status"`
-	Synopsis        string       `json:"synopsis"`
-	CoverImage      string       `json:"coverImage"`
-	LastEditedScene string       `json:"lastEditedScene"`
-	Stats           ProjectStats `json:"stats"`
-	CreatedAt       time.Time    `json:"createdAt"`
-	UpdatedAt       time.Time    `json:"updatedAt"`
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"userId"`
+	Title      string    `json:"title"`
+	Logline    string    `json:"logline"`
+	Genre      string    `json:"genre"`
+	Format     string    `json:"format"`
+	Status     string    `json:"status"`
+	Synopsis   string    `json:"synopsis"`
+	CoverImage string    `json:"coverImage"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 type ProjectDetailResponse struct {
@@ -68,14 +60,13 @@ type CreateProjectRequest struct {
 }
 
 type UpdateProjectRequest struct {
-	Title           *string `json:"title"`
-	Logline         *string `json:"logline"`
-	Genre           *string `json:"genre"`
-	Format          *string `json:"format"`
-	Status          *string `json:"status"`
-	Synopsis        *string `json:"synopsis"`
-	CoverImage      *string `json:"coverImage"`
-	LastEditedScene *string `json:"lastEditedScene"`
+	Title      *string `json:"title"`
+	Logline    *string `json:"logline"`
+	Genre      *string `json:"genre"`
+	Format     *string `json:"format"`
+	Status     *string `json:"status"`
+	Synopsis   *string `json:"synopsis"`
+	CoverImage *string `json:"coverImage"`
 }
 
 type CreateSceneRequest struct {

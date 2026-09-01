@@ -28,12 +28,13 @@ type ScreenplayRepository interface {
 	DeleteScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) error
 
 	// Screenplay CRUD & Content
-	CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
+	CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error)
 	GetScreenplay(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	GetScreenplayWithOwnership(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
 	GetDefaultScreenplayByProject(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayResponse, error)
 	ListScreenplaysByProject(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
-	UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
+	UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string, wordCount, pageCount, sceneCount *int) (*model.ScreenplayResponse, error)
+	UpdateScreenplayStats(ctx context.Context, id uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayResponse, error)
 	DeleteScreenplay(ctx context.Context, id uuid.UUID) error
 
 	GetContent(ctx context.Context, screenplayID uuid.UUID) (*model.ScreenplayContentResponse, error)
@@ -60,7 +61,7 @@ func NewScreenplayRepository(pool *pgxpool.Pool) ScreenplayRepository {
 	}
 }
 
-func toScreenplayResponse(id, projectID pgtype.UUID, title, description string, isDefault bool, sortOrder int32, createdAt, updatedAt pgtype.Timestamptz) model.ScreenplayResponse {
+func toScreenplayResponse(id, projectID pgtype.UUID, title, description string, isDefault bool, sortOrder, wordCount, pageCount, sceneCount int32, createdAt, updatedAt pgtype.Timestamptz) model.ScreenplayResponse {
 	return model.ScreenplayResponse{
 		ID:          pgtypeToUUID(id),
 		ProjectID:   pgtypeToUUID(projectID),
@@ -68,6 +69,9 @@ func toScreenplayResponse(id, projectID pgtype.UUID, title, description string, 
 		Description: description,
 		IsDefault:   isDefault,
 		SortOrder:   int(sortOrder),
+		WordCount:   int(wordCount),
+		PageCount:   int(pageCount),
+		SceneCount:  int(sceneCount),
 		CreatedAt:   pgtypeToTime(createdAt),
 		UpdatedAt:   pgtypeToTime(updatedAt),
 	}
@@ -172,13 +176,13 @@ func toGetVersionResponse(v generated.GetScreenplayVersionByIDRow) model.Screenp
 	}
 }
 
-// User Encryption Metadata
+// User Encryption Metadata & Identity
 
 func (r *screenplayRepository) GetUserEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error) {
 	m, err := r.queries.GetUserEncryptionMetadata(ctx, uuidToPgtype(userID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, model.ErrEncryptionNotInitialized
+			return nil, model.ErrNotFound
 		}
 		return nil, err
 	}
@@ -342,6 +346,7 @@ func (r *screenplayRepository) CreateScreenplay(
 	encPayload *model.EncryptedPayload,
 	wrappedKey *model.WrappedKeyPayload,
 	userID uuid.UUID,
+	wordCount, pageCount, sceneCount int,
 ) (*model.ScreenplayDetailResponse, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -365,6 +370,9 @@ func (r *screenplayRepository) CreateScreenplay(
 		Description: description,
 		IsDefault:   isDefault,
 		SortOrder:   int32(len(existing) + 1),
+		WordCount:   int32(wordCount),
+		PageCount:   int32(pageCount),
+		SceneCount:  int32(sceneCount),
 	})
 	if err != nil {
 		return nil, err
@@ -418,7 +426,7 @@ func (r *screenplayRepository) CreateScreenplay(
 	}
 
 	return &model.ScreenplayDetailResponse{
-		ScreenplayResponse: toScreenplayResponse(screenplay.ID, screenplay.ProjectID, screenplay.Title, screenplay.Description, screenplay.IsDefault, screenplay.SortOrder, screenplay.CreatedAt, screenplay.UpdatedAt),
+		ScreenplayResponse: toScreenplayResponse(screenplay.ID, screenplay.ProjectID, screenplay.Title, screenplay.Description, screenplay.IsDefault, screenplay.SortOrder, screenplay.WordCount, screenplay.PageCount, screenplay.SceneCount, screenplay.CreatedAt, screenplay.UpdatedAt),
 		Content:            detailContent,
 		Revision:           content.Revision,
 		IsEncrypted:        content.IsEncrypted,
@@ -466,7 +474,7 @@ func (r *screenplayRepository) GetDefaultScreenplayByProject(ctx context.Context
 		return nil, err
 	}
 
-	resp := toScreenplayResponse(row.ID, row.ProjectID, row.Title, row.Description, row.IsDefault, row.SortOrder, row.CreatedAt, row.UpdatedAt)
+	resp := toScreenplayResponse(row.ID, row.ProjectID, row.Title, row.Description, row.IsDefault, row.SortOrder, row.WordCount, row.PageCount, row.SceneCount, row.CreatedAt, row.UpdatedAt)
 	return &resp, nil
 }
 
@@ -481,12 +489,12 @@ func (r *screenplayRepository) ListScreenplaysByProject(ctx context.Context, pro
 
 	res := make([]model.ScreenplayResponse, 0, len(rows))
 	for _, row := range rows {
-		res = append(res, toScreenplayResponse(row.ID, row.ProjectID, row.Title, row.Description, row.IsDefault, row.SortOrder, row.CreatedAt, row.UpdatedAt))
+		res = append(res, toScreenplayResponse(row.ID, row.ProjectID, row.Title, row.Description, row.IsDefault, row.SortOrder, row.WordCount, row.PageCount, row.SceneCount, row.CreatedAt, row.UpdatedAt))
 	}
 	return res, nil
 }
 
-func (r *screenplayRepository) UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error) {
+func (r *screenplayRepository) UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string, wordCount, pageCount, sceneCount *int) (*model.ScreenplayResponse, error) {
 	var t, d string
 	if title != nil {
 		t = *title
@@ -495,10 +503,24 @@ func (r *screenplayRepository) UpdateScreenplay(ctx context.Context, id uuid.UUI
 		d = *description
 	}
 
+	var wc, pc, sc int32
+	if wordCount != nil {
+		wc = int32(*wordCount)
+	}
+	if pageCount != nil {
+		pc = int32(*pageCount)
+	}
+	if sceneCount != nil {
+		sc = int32(*sceneCount)
+	}
+
 	s, err := r.queries.UpdateScreenplay(ctx, generated.UpdateScreenplayParams{
 		ID:          uuidToPgtype(id),
 		Column2:     t,
 		Description: d,
+		WordCount:   wc,
+		PageCount:   pc,
+		SceneCount:  sc,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -507,7 +529,25 @@ func (r *screenplayRepository) UpdateScreenplay(ctx context.Context, id uuid.UUI
 		return nil, err
 	}
 
-	resp := toScreenplayResponse(s.ID, s.ProjectID, s.Title, s.Description, s.IsDefault, s.SortOrder, s.CreatedAt, s.UpdatedAt)
+	resp := toScreenplayResponse(s.ID, s.ProjectID, s.Title, s.Description, s.IsDefault, s.SortOrder, s.WordCount, s.PageCount, s.SceneCount, s.CreatedAt, s.UpdatedAt)
+	return &resp, nil
+}
+
+func (r *screenplayRepository) UpdateScreenplayStats(ctx context.Context, id uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayResponse, error) {
+	s, err := r.queries.UpdateScreenplayStats(ctx, generated.UpdateScreenplayStatsParams{
+		ID:         uuidToPgtype(id),
+		WordCount:  int32(wordCount),
+		PageCount:  int32(pageCount),
+		SceneCount: int32(sceneCount),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	resp := toScreenplayResponse(s.ID, s.ProjectID, s.Title, s.Description, s.IsDefault, s.SortOrder, s.WordCount, s.PageCount, s.SceneCount, s.CreatedAt, s.UpdatedAt)
 	return &resp, nil
 }
 
@@ -665,27 +705,28 @@ func (r *screenplayRepository) CreateVersion(
 }
 
 func (r *screenplayRepository) ListVersions(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayVersionResponse, error) {
-	versions, err := r.queries.ListScreenplayVersionsByScreenplayID(ctx, uuidToPgtype(screenplayID))
+	rows, err := r.queries.ListScreenplayVersionsByScreenplayID(ctx, uuidToPgtype(screenplayID))
 	if err != nil {
 		return nil, err
 	}
 
-	res := make([]model.ScreenplayVersionResponse, 0, len(versions))
-	for _, v := range versions {
-		res = append(res, toListVersionResponse(v))
+	res := make([]model.ScreenplayVersionResponse, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, toListVersionResponse(row))
 	}
 	return res, nil
 }
 
 func (r *screenplayRepository) GetVersionByID(ctx context.Context, versionID uuid.UUID) (*model.ScreenplayVersionResponse, error) {
-	v, err := r.queries.GetScreenplayVersionByID(ctx, uuidToPgtype(versionID))
+	row, err := r.queries.GetScreenplayVersionByID(ctx, uuidToPgtype(versionID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
 		return nil, err
 	}
-	resp := toGetVersionResponse(v)
+
+	resp := toGetVersionResponse(row)
 	return &resp, nil
 }
 

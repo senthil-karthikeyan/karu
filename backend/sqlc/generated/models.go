@@ -30,21 +30,17 @@ type AuthIdentity struct {
 }
 
 type Project struct {
-	ID              pgtype.UUID        `json:"id"`
-	UserID          pgtype.UUID        `json:"user_id"`
-	Title           string             `json:"title"`
-	Logline         string             `json:"logline"`
-	Genre           string             `json:"genre"`
-	Format          string             `json:"format"`
-	Status          string             `json:"status"`
-	Synopsis        string             `json:"synopsis"`
-	CoverImage      string             `json:"cover_image"`
-	PageCount       int32              `json:"page_count"`
-	WordCount       int32              `json:"word_count"`
-	SceneCount      int32              `json:"scene_count"`
-	LastEditedScene string             `json:"last_edited_scene"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Title      string             `json:"title"`
+	Logline    string             `json:"logline"`
+	Genre      string             `json:"genre"`
+	Format     string             `json:"format"`
+	Status     string             `json:"status"`
+	Synopsis   string             `json:"synopsis"`
+	CoverImage string             `json:"cover_image"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
 type RefreshToken struct {
@@ -66,6 +62,9 @@ type Screenplay struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 }
 
 type ScreenplayContent struct {

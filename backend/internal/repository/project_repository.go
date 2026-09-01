@@ -35,23 +35,17 @@ func NewProjectRepository(pool *pgxpool.Pool) ProjectRepository {
 
 func toProjectResponse(p generated.Project) model.ProjectResponse {
 	return model.ProjectResponse{
-		ID:              pgtypeToUUID(p.ID),
-		UserID:          pgtypeToUUID(p.UserID),
-		Title:           p.Title,
-		Logline:         p.Logline,
-		Genre:           p.Genre,
-		Format:          p.Format,
-		Status:          p.Status,
-		Synopsis:        p.Synopsis,
-		CoverImage:      p.CoverImage,
-		LastEditedScene: p.LastEditedScene,
-		Stats: model.ProjectStats{
-			PageCount:  int(p.PageCount),
-			WordCount:  int(p.WordCount),
-			SceneCount: int(p.SceneCount),
-		},
-		CreatedAt: pgtypeToTime(p.CreatedAt),
-		UpdatedAt: pgtypeToTime(p.UpdatedAt),
+		ID:         pgtypeToUUID(p.ID),
+		UserID:     pgtypeToUUID(p.UserID),
+		Title:      p.Title,
+		Logline:    p.Logline,
+		Genre:      p.Genre,
+		Format:     p.Format,
+		Status:     p.Status,
+		Synopsis:   p.Synopsis,
+		CoverImage: p.CoverImage,
+		CreatedAt:  pgtypeToTime(p.CreatedAt),
+		UpdatedAt:  pgtypeToTime(p.UpdatedAt),
 	}
 }
 
@@ -70,18 +64,14 @@ func (r *projectRepository) Create(ctx context.Context, userID uuid.UUID, req mo
 	}
 
 	p, err := r.queries.CreateProject(ctx, generated.CreateProjectParams{
-		UserID:          uuidToPgtype(userID),
-		Title:           req.Title,
-		Logline:         req.Logline,
-		Genre:           genre,
-		Format:          format,
-		Status:          status,
-		Synopsis:        req.Synopsis,
-		CoverImage:      req.CoverImage,
-		PageCount:       0,
-		WordCount:       0,
-		SceneCount:      0,
-		LastEditedScene: "",
+		UserID:     uuidToPgtype(userID),
+		Title:      req.Title,
+		Logline:    req.Logline,
+		Genre:      genre,
+		Format:     format,
+		Status:     status,
+		Synopsis:   req.Synopsis,
+		CoverImage: req.CoverImage,
 	})
 	if err != nil {
 		return nil, err
@@ -130,7 +120,7 @@ func (r *projectRepository) ListByUserID(ctx context.Context, userID uuid.UUID) 
 }
 
 func (r *projectRepository) Update(ctx context.Context, id, userID uuid.UUID, req model.UpdateProjectRequest) (*model.ProjectResponse, error) {
-	var title, logline, genre, format, status, synopsis, coverImage, lastEditedScene string
+	var title, logline, genre, format, status, synopsis, coverImage string
 	if req.Title != nil {
 		title = *req.Title
 	}
@@ -152,21 +142,17 @@ func (r *projectRepository) Update(ctx context.Context, id, userID uuid.UUID, re
 	if req.CoverImage != nil {
 		coverImage = *req.CoverImage
 	}
-	if req.LastEditedScene != nil {
-		lastEditedScene = *req.LastEditedScene
-	}
 
 	p, err := r.queries.UpdateProject(ctx, generated.UpdateProjectParams{
-		ID:              uuidToPgtype(id),
-		UserID:          uuidToPgtype(userID),
-		Column3:         title,
-		Logline:         logline,
-		Column5:         genre,
-		Column6:         format,
-		Column7:         status,
-		Synopsis:        synopsis,
-		CoverImage:      coverImage,
-		LastEditedScene: lastEditedScene,
+		ID:         uuidToPgtype(id),
+		UserID:     uuidToPgtype(userID),
+		Column3:    title,
+		Logline:    logline,
+		Column5:    genre,
+		Column6:    format,
+		Column7:    status,
+		Synopsis:   synopsis,
+		CoverImage: coverImage,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -7,13 +7,9 @@ INSERT INTO projects (
     format,
     status,
     synopsis,
-    cover_image,
-    page_count,
-    word_count,
-    scene_count,
-    last_edited_scene
+    cover_image
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
 RETURNING *;
 
@@ -43,7 +39,6 @@ SET
     status = COALESCE(NULLIF($7, ''), status),
     synopsis = COALESCE($8, synopsis),
     cover_image = COALESCE($9, cover_image),
-    last_edited_scene = COALESCE($10, last_edited_scene),
     updated_at = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING *;

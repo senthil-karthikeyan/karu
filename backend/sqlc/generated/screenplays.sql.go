@@ -17,11 +17,14 @@ INSERT INTO screenplays (
     title,
     description,
     is_default,
-    sort_order
+    sort_order,
+    word_count,
+    page_count,
+    scene_count
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
-RETURNING id, project_id, title, description, is_default, sort_order, created_at, updated_at
+RETURNING id, project_id, title, description, is_default, sort_order, word_count, page_count, scene_count, created_at, updated_at
 `
 
 type CreateScreenplayParams struct {
@@ -30,6 +33,9 @@ type CreateScreenplayParams struct {
 	Description string      `json:"description"`
 	IsDefault   bool        `json:"is_default"`
 	SortOrder   int32       `json:"sort_order"`
+	WordCount   int32       `json:"word_count"`
+	PageCount   int32       `json:"page_count"`
+	SceneCount  int32       `json:"scene_count"`
 }
 
 type CreateScreenplayRow struct {
@@ -39,6 +45,9 @@ type CreateScreenplayRow struct {
 	Description string             `json:"description"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -50,6 +59,9 @@ func (q *Queries) CreateScreenplay(ctx context.Context, arg CreateScreenplayPara
 		arg.Description,
 		arg.IsDefault,
 		arg.SortOrder,
+		arg.WordCount,
+		arg.PageCount,
+		arg.SceneCount,
 	)
 	var i CreateScreenplayRow
 	err := row.Scan(
@@ -59,6 +71,9 @@ func (q *Queries) CreateScreenplay(ctx context.Context, arg CreateScreenplayPara
 		&i.Description,
 		&i.IsDefault,
 		&i.SortOrder,
+		&i.WordCount,
+		&i.PageCount,
+		&i.SceneCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -76,7 +91,7 @@ func (q *Queries) DeleteScreenplay(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getDefaultScreenplayByProjectID = `-- name: GetDefaultScreenplayByProjectID :one
-SELECT s.id, s.project_id, s.title, s.description, s.is_default, s.sort_order, s.created_at, s.updated_at
+SELECT s.id, s.project_id, s.title, s.description, s.is_default, s.sort_order, s.word_count, s.page_count, s.scene_count, s.created_at, s.updated_at
 FROM screenplays s
 JOIN projects p ON p.id = s.project_id
 WHERE s.project_id = $1 AND p.user_id = $2
@@ -96,6 +111,9 @@ type GetDefaultScreenplayByProjectIDRow struct {
 	Description string             `json:"description"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -110,6 +128,9 @@ func (q *Queries) GetDefaultScreenplayByProjectID(ctx context.Context, arg GetDe
 		&i.Description,
 		&i.IsDefault,
 		&i.SortOrder,
+		&i.WordCount,
+		&i.PageCount,
+		&i.SceneCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -117,7 +138,7 @@ func (q *Queries) GetDefaultScreenplayByProjectID(ctx context.Context, arg GetDe
 }
 
 const getScreenplayByID = `-- name: GetScreenplayByID :one
-SELECT id, project_id, title, description, is_default, sort_order, created_at, updated_at
+SELECT id, project_id, title, description, is_default, sort_order, word_count, page_count, scene_count, created_at, updated_at
 FROM screenplays
 WHERE id = $1
 `
@@ -129,6 +150,9 @@ type GetScreenplayByIDRow struct {
 	Description string             `json:"description"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -143,6 +167,9 @@ func (q *Queries) GetScreenplayByID(ctx context.Context, id pgtype.UUID) (GetScr
 		&i.Description,
 		&i.IsDefault,
 		&i.SortOrder,
+		&i.WordCount,
+		&i.PageCount,
+		&i.SceneCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -150,7 +177,7 @@ func (q *Queries) GetScreenplayByID(ctx context.Context, id pgtype.UUID) (GetScr
 }
 
 const getScreenplayByIDAndUserID = `-- name: GetScreenplayByIDAndUserID :one
-SELECT s.id, s.project_id, s.title, s.description, s.is_default, s.sort_order, s.created_at, s.updated_at, p.user_id
+SELECT s.id, s.project_id, s.title, s.description, s.is_default, s.sort_order, s.word_count, s.page_count, s.scene_count, s.created_at, s.updated_at, p.user_id
 FROM screenplays s
 JOIN projects p ON p.id = s.project_id
 WHERE s.id = $1 AND p.user_id = $2
@@ -168,6 +195,9 @@ type GetScreenplayByIDAndUserIDRow struct {
 	Description string             `json:"description"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 	UserID      pgtype.UUID        `json:"user_id"`
@@ -183,6 +213,9 @@ func (q *Queries) GetScreenplayByIDAndUserID(ctx context.Context, arg GetScreenp
 		&i.Description,
 		&i.IsDefault,
 		&i.SortOrder,
+		&i.WordCount,
+		&i.PageCount,
+		&i.SceneCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.UserID,
@@ -191,7 +224,7 @@ func (q *Queries) GetScreenplayByIDAndUserID(ctx context.Context, arg GetScreenp
 }
 
 const listScreenplaysByProjectID = `-- name: ListScreenplaysByProjectID :many
-SELECT s.id, s.project_id, s.title, s.description, s.is_default, s.sort_order, s.created_at, s.updated_at
+SELECT s.id, s.project_id, s.title, s.description, s.is_default, s.sort_order, s.word_count, s.page_count, s.scene_count, s.created_at, s.updated_at
 FROM screenplays s
 JOIN projects p ON p.id = s.project_id
 WHERE s.project_id = $1 AND p.user_id = $2
@@ -210,6 +243,9 @@ type ListScreenplaysByProjectIDRow struct {
 	Description string             `json:"description"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
@@ -230,6 +266,9 @@ func (q *Queries) ListScreenplaysByProjectID(ctx context.Context, arg ListScreen
 			&i.Description,
 			&i.IsDefault,
 			&i.SortOrder,
+			&i.WordCount,
+			&i.PageCount,
+			&i.SceneCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -248,15 +287,21 @@ UPDATE screenplays
 SET
     title = COALESCE(NULLIF($2, ''), title),
     description = COALESCE($3, description),
+    word_count = COALESCE($4, word_count),
+    page_count = COALESCE($5, page_count),
+    scene_count = COALESCE($6, scene_count),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, project_id, title, description, is_default, sort_order, created_at, updated_at
+RETURNING id, project_id, title, description, is_default, sort_order, word_count, page_count, scene_count, created_at, updated_at
 `
 
 type UpdateScreenplayParams struct {
 	ID          pgtype.UUID `json:"id"`
 	Column2     interface{} `json:"column_2"`
 	Description string      `json:"description"`
+	WordCount   int32       `json:"word_count"`
+	PageCount   int32       `json:"page_count"`
+	SceneCount  int32       `json:"scene_count"`
 }
 
 type UpdateScreenplayRow struct {
@@ -266,12 +311,22 @@ type UpdateScreenplayRow struct {
 	Description string             `json:"description"`
 	IsDefault   bool               `json:"is_default"`
 	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) UpdateScreenplay(ctx context.Context, arg UpdateScreenplayParams) (UpdateScreenplayRow, error) {
-	row := q.db.QueryRow(ctx, updateScreenplay, arg.ID, arg.Column2, arg.Description)
+	row := q.db.QueryRow(ctx, updateScreenplay,
+		arg.ID,
+		arg.Column2,
+		arg.Description,
+		arg.WordCount,
+		arg.PageCount,
+		arg.SceneCount,
+	)
 	var i UpdateScreenplayRow
 	err := row.Scan(
 		&i.ID,
@@ -280,6 +335,65 @@ func (q *Queries) UpdateScreenplay(ctx context.Context, arg UpdateScreenplayPara
 		&i.Description,
 		&i.IsDefault,
 		&i.SortOrder,
+		&i.WordCount,
+		&i.PageCount,
+		&i.SceneCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateScreenplayStats = `-- name: UpdateScreenplayStats :one
+UPDATE screenplays
+SET
+    word_count = $2,
+    page_count = $3,
+    scene_count = $4,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, project_id, title, description, is_default, sort_order, word_count, page_count, scene_count, created_at, updated_at
+`
+
+type UpdateScreenplayStatsParams struct {
+	ID         pgtype.UUID `json:"id"`
+	WordCount  int32       `json:"word_count"`
+	PageCount  int32       `json:"page_count"`
+	SceneCount int32       `json:"scene_count"`
+}
+
+type UpdateScreenplayStatsRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	ProjectID   pgtype.UUID        `json:"project_id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	IsDefault   bool               `json:"is_default"`
+	SortOrder   int32              `json:"sort_order"`
+	WordCount   int32              `json:"word_count"`
+	PageCount   int32              `json:"page_count"`
+	SceneCount  int32              `json:"scene_count"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateScreenplayStats(ctx context.Context, arg UpdateScreenplayStatsParams) (UpdateScreenplayStatsRow, error) {
+	row := q.db.QueryRow(ctx, updateScreenplayStats,
+		arg.ID,
+		arg.WordCount,
+		arg.PageCount,
+		arg.SceneCount,
+	)
+	var i UpdateScreenplayStatsRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Title,
+		&i.Description,
+		&i.IsDefault,
+		&i.SortOrder,
+		&i.WordCount,
+		&i.PageCount,
+		&i.SceneCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

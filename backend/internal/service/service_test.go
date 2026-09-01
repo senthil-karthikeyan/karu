@@ -125,12 +125,13 @@ type mockScreenplayRepo struct {
 	upsertScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error)
 	deleteScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) error
 
-	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error)
+	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error)
 	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	getOwnershipFunc          func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
 	getDefaultByProjectFunc   func(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayResponse, error)
 	listByProjectFunc         func(ctx context.Context, projectID, userID uuid.UUID) ([]model.ScreenplayResponse, error)
-	updateScreenplayFunc func(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error)
+	updateScreenplayFunc func(ctx context.Context, id uuid.UUID, title, description *string, wordCount, pageCount, sceneCount *int) (*model.ScreenplayResponse, error)
+	updateScreenplayStatsFunc func(ctx context.Context, id uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayResponse, error)
 	deleteScreenplayFunc func(ctx context.Context, id uuid.UUID) error
 
 	getContentFunc       func(ctx context.Context, screenplayID uuid.UUID) (*model.ScreenplayContentResponse, error)
@@ -215,9 +216,9 @@ func (m *mockScreenplayRepo) DeleteScreenplayKey(ctx context.Context, screenplay
 	return nil
 }
 
-func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
+func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error) {
 	if m.createScreenplayFunc != nil {
-		return m.createScreenplayFunc(ctx, projectID, title, description, initialContent, encPayload, wrappedKey, userID)
+		return m.createScreenplayFunc(ctx, projectID, title, description, initialContent, encPayload, wrappedKey, userID, wordCount, pageCount, sceneCount)
 	}
 	return nil, nil
 }
@@ -254,11 +255,24 @@ func (m *mockScreenplayRepo) ListScreenplaysByProject(ctx context.Context, proje
 	return []model.ScreenplayResponse{}, nil
 }
 
-func (m *mockScreenplayRepo) UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string) (*model.ScreenplayResponse, error) {
+func (m *mockScreenplayRepo) UpdateScreenplay(ctx context.Context, id uuid.UUID, title, description *string, wordCount, pageCount, sceneCount *int) (*model.ScreenplayResponse, error) {
 	if m.updateScreenplayFunc != nil {
-		return m.updateScreenplayFunc(ctx, id, title, description)
+		return m.updateScreenplayFunc(ctx, id, title, description, wordCount, pageCount, sceneCount)
 	}
 	return nil, nil
+}
+
+func (m *mockScreenplayRepo) UpdateScreenplayStats(ctx context.Context, id uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayResponse, error) {
+	if m.updateScreenplayStatsFunc != nil {
+		return m.updateScreenplayStatsFunc(ctx, id, wordCount, pageCount, sceneCount)
+	}
+	return &model.ScreenplayResponse{
+		ID:         id,
+		WordCount:  wordCount,
+		PageCount:  pageCount,
+		SceneCount: sceneCount,
+		UpdatedAt:  time.Now(),
+	}, nil
 }
 
 func (m *mockScreenplayRepo) DeleteScreenplay(ctx context.Context, id uuid.UUID) error {

@@ -14,6 +14,9 @@ type ScreenplayResponse struct {
 	Description string    `json:"description"`
 	IsDefault   bool      `json:"isDefault"`
 	SortOrder   int       `json:"sortOrder"`
+	WordCount   int       `json:"wordCount"`
+	PageCount   int       `json:"pageCount"`
+	SceneCount  int       `json:"sceneCount"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
@@ -34,6 +37,9 @@ type CreateScreenplayRequest struct {
 	Description      string             `json:"description"`
 	IsDefault        bool               `json:"isDefault,omitempty"`
 	SortOrder        int                `json:"sortOrder,omitempty"`
+	WordCount        int                `json:"wordCount,omitempty"`
+	PageCount        int                `json:"pageCount,omitempty"`
+	SceneCount       int                `json:"sceneCount,omitempty"`
 	EncryptedPayload *EncryptedPayload  `json:"encryptedPayload,omitempty"`
 	WrappedKey       *WrappedKeyPayload `json:"wrappedKey,omitempty"`
 }
@@ -43,6 +49,9 @@ type UpdateScreenplayRequest struct {
 	Description *string `json:"description"`
 	IsDefault   *bool   `json:"isDefault"`
 	SortOrder   *int    `json:"sortOrder"`
+	WordCount   *int    `json:"wordCount"`
+	PageCount   *int    `json:"pageCount"`
+	SceneCount  *int    `json:"sceneCount"`
 }
 
 type ScreenplayContentResponse struct {
@@ -61,6 +70,9 @@ type SaveContentRequest struct {
 	Content          json.RawMessage   `json:"content,omitempty"`
 	EncryptedContent *EncryptedPayload `json:"encryptedContent,omitempty"`
 	Revision         int64             `json:"revision"`
+	WordCount        *int              `json:"wordCount,omitempty"`
+	PageCount        *int              `json:"pageCount,omitempty"`
+	SceneCount       *int              `json:"sceneCount,omitempty"`
 }
 
 type ScreenplayVersionResponse struct {

@@ -39,7 +39,7 @@ func TestCanonicalScreenplayFlow(t *testing.T) {
 	var storedKey *model.ScreenplayKeyResponse
 
 	mockScreenRepo := &mockScreenplayRepo{
-		createScreenplayFunc: func(ctx context.Context, pid uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, uid uuid.UUID) (*model.ScreenplayDetailResponse, error) {
+		createScreenplayFunc: func(ctx context.Context, pid uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, uid uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error) {
 			storedScreenplay = &model.ScreenplayResponse{
 				ID:          screenplayID,
 				ProjectID:   pid,
@@ -47,6 +47,9 @@ func TestCanonicalScreenplayFlow(t *testing.T) {
 				Description: description,
 				IsDefault:   true,
 				SortOrder:   1,
+				WordCount:   wordCount,
+				PageCount:   pageCount,
+				SceneCount:  sceneCount,
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
 			}
@@ -304,5 +307,192 @@ func TestCanonicalScreenplayFlow(t *testing.T) {
 	}
 	if decryptedDoc["type"] != "doc" {
 		t.Errorf("Expected doc type, got: %v", decryptedDoc["type"])
+	}
+}
+
+func TestScreenplayStatisticsPerScreenplayAndAutosaveFlow(t *testing.T) {
+	ctx := context.Background()
+	userID := uuid.New()
+	projectID := uuid.New()
+
+	screenplay1ID := uuid.New()
+	screenplay2ID := uuid.New()
+
+	spStore := make(map[uuid.UUID]*model.ScreenplayResponse)
+	contentStore := make(map[uuid.UUID]*model.ScreenplayContentResponse)
+
+	spStore[screenplay1ID] = &model.ScreenplayResponse{
+		ID:          screenplay1ID,
+		ProjectID:   projectID,
+		Title:       "Feature Film Draft",
+		Description: "Screenplay 1",
+		IsDefault:   true,
+		SortOrder:   1,
+		WordCount:   0,
+		PageCount:   0,
+		SceneCount:  0,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	contentStore[screenplay1ID] = &model.ScreenplayContentResponse{
+		ScreenplayID: screenplay1ID,
+		Content:      "initial",
+		Revision:     1,
+		IsEncrypted:  false,
+		UpdatedAt:    time.Now(),
+	}
+
+	spStore[screenplay2ID] = &model.ScreenplayResponse{
+		ID:          screenplay2ID,
+		ProjectID:   projectID,
+		Title:       "TV Pilot Adaptation",
+		Description: "Screenplay 2",
+		IsDefault:   false,
+		SortOrder:   2,
+		WordCount:   0,
+		PageCount:   0,
+		SceneCount:  0,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	contentStore[screenplay2ID] = &model.ScreenplayContentResponse{
+		ScreenplayID: screenplay2ID,
+		Content:      "initial",
+		Revision:     1,
+		IsEncrypted:  false,
+		UpdatedAt:    time.Now(),
+	}
+
+	mockRepo := &mockScreenplayRepo{
+		getOwnershipFunc: func(ctx context.Context, id, uid uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error) {
+			sp, ok := spStore[id]
+			if !ok || uid != userID {
+				return nil, model.ErrNotFound
+			}
+			return &generated.GetScreenplayByIDAndUserIDRow{
+				ID:          pgtype.UUID{Bytes: sp.ID, Valid: true},
+				ProjectID:   pgtype.UUID{Bytes: sp.ProjectID, Valid: true},
+				Title:       sp.Title,
+				Description: sp.Description,
+				IsDefault:   sp.IsDefault,
+				SortOrder:   int32(sp.SortOrder),
+				WordCount:   int32(sp.WordCount),
+				PageCount:   int32(sp.PageCount),
+				SceneCount:  int32(sp.SceneCount),
+				UserID:      pgtype.UUID{Bytes: userID, Valid: true},
+				CreatedAt:   pgtype.Timestamptz{Time: sp.CreatedAt, Valid: true},
+				UpdatedAt:   pgtype.Timestamptz{Time: sp.UpdatedAt, Valid: true},
+			}, nil
+		},
+		getContentFunc: func(ctx context.Context, sid uuid.UUID) (*model.ScreenplayContentResponse, error) {
+			c, ok := contentStore[sid]
+			if !ok {
+				return nil, model.ErrNotFound
+			}
+			return c, nil
+		},
+		saveEncryptedContent: func(ctx context.Context, sid uuid.UUID, payload model.EncryptedPayload, revision int64) (*model.ScreenplayContentResponse, error) {
+			c, ok := contentStore[sid]
+			if !ok {
+				return nil, model.ErrNotFound
+			}
+			c.IsEncrypted = true
+			c.EncryptionVersion = payload.Version
+			c.Algorithm = payload.Algorithm
+			c.IV = payload.IV
+			c.Ciphertext = payload.Ciphertext
+			c.Revision = revision + 1
+			c.UpdatedAt = time.Now()
+			return c, nil
+		},
+		updateScreenplayStatsFunc: func(ctx context.Context, id uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayResponse, error) {
+			sp, ok := spStore[id]
+			if !ok {
+				return nil, model.ErrNotFound
+			}
+			sp.WordCount = wordCount
+			sp.PageCount = pageCount
+			sp.SceneCount = sceneCount
+			sp.UpdatedAt = time.Now()
+			return sp, nil
+		},
+	}
+
+	screenplaySvc := NewScreenplayService(mockRepo, &mockProjectRepoForScreenplay{})
+
+	// 1. Screenplay 1 autosave with statistics (e.g. 2500 words, 10 pages, 5 scenes)
+	words1, pages1, scenes1 := 2500, 10, 5
+	encPayload1 := model.EncryptedPayload{
+		Version:    1,
+		Algorithm:  "AES-GCM",
+		IV:         "MTIzNDU2Nzg5MDEy",
+		Ciphertext: "Y2lwaGVydGV4dC0x",
+	}
+
+	_, err := screenplaySvc.SaveContent(ctx, screenplay1ID, userID, model.SaveContentRequest{
+		EncryptedContent: &encPayload1,
+		Revision:         1,
+		WordCount:        &words1,
+		PageCount:        &pages1,
+		SceneCount:       &scenes1,
+	})
+	if err != nil {
+		t.Fatalf("Failed to save content for screenplay 1: %v", err)
+	}
+
+	// Verify screenplay 1 stats are updated
+	sp1Detail, err := screenplaySvc.GetScreenplay(ctx, screenplay1ID, userID)
+	if err != nil {
+		t.Fatalf("Failed to get screenplay 1: %v", err)
+	}
+	if sp1Detail.WordCount != 2500 || sp1Detail.PageCount != 10 || sp1Detail.SceneCount != 5 {
+		t.Errorf("Screenplay 1 stats mismatch: got words=%d, pages=%d, scenes=%d", sp1Detail.WordCount, sp1Detail.PageCount, sp1Detail.SceneCount)
+	}
+
+	// 2. Verify Screenplay 2 stats are isolated and still 0
+	sp2Detail, err := screenplaySvc.GetScreenplay(ctx, screenplay2ID, userID)
+	if err != nil {
+		t.Fatalf("Failed to get screenplay 2: %v", err)
+	}
+	if sp2Detail.WordCount != 0 || sp2Detail.PageCount != 0 || sp2Detail.SceneCount != 0 {
+		t.Errorf("Screenplay 2 stats should remain 0, got words=%d, pages=%d, scenes=%d", sp2Detail.WordCount, sp2Detail.PageCount, sp2Detail.SceneCount)
+	}
+
+	// 3. Screenplay 2 autosave with different statistics (e.g. 500 words, 2 pages, 1 scene)
+	words2, pages2, scenes2 := 500, 2, 1
+	encPayload2 := model.EncryptedPayload{
+		Version:    1,
+		Algorithm:  "AES-GCM",
+		IV:         "MTIzNDU2Nzg5MDEy",
+		Ciphertext: "Y2lwaGVydGV4dC0y",
+	}
+
+	_, err = screenplaySvc.SaveContent(ctx, screenplay2ID, userID, model.SaveContentRequest{
+		EncryptedContent: &encPayload2,
+		Revision:         1,
+		WordCount:        &words2,
+		PageCount:        &pages2,
+		SceneCount:       &scenes2,
+	})
+	if err != nil {
+		t.Fatalf("Failed to save content for screenplay 2: %v", err)
+	}
+
+	// Verify screenplay 2 updated
+	sp2DetailAfter, err := screenplaySvc.GetScreenplay(ctx, screenplay2ID, userID)
+	if err != nil {
+		t.Fatalf("Failed to get screenplay 2: %v", err)
+	}
+	if sp2DetailAfter.WordCount != 500 || sp2DetailAfter.PageCount != 2 || sp2DetailAfter.SceneCount != 1 {
+		t.Errorf("Screenplay 2 stats mismatch: got words=%d, pages=%d, scenes=%d", sp2DetailAfter.WordCount, sp2DetailAfter.PageCount, sp2DetailAfter.SceneCount)
+	}
+
+	// Verify screenplay 1 was NOT modified by screenplay 2's save
+	sp1DetailFinal, err := screenplaySvc.GetScreenplay(ctx, screenplay1ID, userID)
+	if err != nil {
+		t.Fatalf("Failed to get screenplay 1: %v", err)
+	}
+	if sp1DetailFinal.WordCount != 2500 || sp1DetailFinal.PageCount != 10 || sp1DetailFinal.SceneCount != 5 {
+		t.Errorf("Screenplay 1 stats unexpectedly mutated: got words=%d, pages=%d, scenes=%d", sp1DetailFinal.WordCount, sp1DetailFinal.PageCount, sp1DetailFinal.SceneCount)
 	}
 }

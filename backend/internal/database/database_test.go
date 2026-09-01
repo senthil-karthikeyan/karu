@@ -240,7 +240,7 @@ func TestRepositoriesIntegration(t *testing.T) {
 	}
 
 	// 5. Screenplay Creation & Initial Content
-	screenplay, err := screenplayRepo.CreateScreenplay(ctx, proj.ID, "Draft 1", "Initial draft", "<p>Scene 1</p>", nil, nil, user.ID)
+	screenplay, err := screenplayRepo.CreateScreenplay(ctx, proj.ID, "Draft 1", "Initial draft", "<p>Scene 1</p>", nil, nil, user.ID, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("Failed to create screenplay: %v", err)
 	}

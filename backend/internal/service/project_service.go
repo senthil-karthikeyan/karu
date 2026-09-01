@@ -58,7 +58,7 @@ func (s *projectService) CreateProject(ctx context.Context, userID uuid.UUID, re
 
 	// Create canonical default screenplay
 	if s.screenplayRepo != nil {
-		_, _ = s.screenplayRepo.CreateScreenplay(ctx, project.ID, "Draft 1", "Default screenplay", "", nil, nil, userID)
+		_, _ = s.screenplayRepo.CreateScreenplay(ctx, project.ID, "Draft 1", "Default screenplay", "", nil, nil, userID, 0, 0, 0)
 	}
 
 	// Create initial activity log
@@ -83,23 +83,17 @@ func (s *projectService) GetProject(ctx context.Context, id, userID uuid.UUID) (
 
 	return &model.ProjectDetailResponse{
 		ProjectResponse: model.ProjectResponse{
-			ID:              id,
-			UserID:          userID,
-			Title:           p.Title,
-			Logline:         p.Logline,
-			Genre:           p.Genre,
-			Format:          p.Format,
-			Status:          p.Status,
-			Synopsis:        p.Synopsis,
-			CoverImage:      p.CoverImage,
-			LastEditedScene: p.LastEditedScene,
-			Stats: model.ProjectStats{
-				PageCount:  int(p.PageCount),
-				WordCount:  int(p.WordCount),
-				SceneCount: int(p.SceneCount),
-			},
-			CreatedAt: p.CreatedAt.Time,
-			UpdatedAt: p.UpdatedAt.Time,
+			ID:         id,
+			UserID:     userID,
+			Title:      p.Title,
+			Logline:    p.Logline,
+			Genre:      p.Genre,
+			Format:     p.Format,
+			Status:     p.Status,
+			Synopsis:   p.Synopsis,
+			CoverImage: p.CoverImage,
+			CreatedAt:  p.CreatedAt.Time,
+			UpdatedAt:  p.UpdatedAt.Time,
 		},
 		Scenes: scenes,
 	}, nil
@@ -118,8 +112,8 @@ func (s *projectService) UpdateProject(ctx context.Context, id, userID uuid.UUID
 
 	var updatedProject *model.ProjectResponse
 
-	// If metadata or last edited scene changed, update metadata
-	if req.Title != nil || req.Logline != nil || req.Genre != nil || req.Format != nil || req.Status != nil || req.Synopsis != nil || req.CoverImage != nil || req.LastEditedScene != nil {
+	// If metadata changed, update metadata
+	if req.Title != nil || req.Logline != nil || req.Genre != nil || req.Format != nil || req.Status != nil || req.Synopsis != nil || req.CoverImage != nil {
 		updatedProject, err = s.projectRepo.Update(ctx, id, userID, req)
 		if err != nil {
 			return nil, err
@@ -130,23 +124,17 @@ func (s *projectService) UpdateProject(ctx context.Context, id, userID uuid.UUID
 
 	if updatedProject == nil {
 		resp := model.ProjectResponse{
-			ID:              id,
-			UserID:          userID,
-			Title:           existing.Title,
-			Logline:         existing.Logline,
-			Genre:           existing.Genre,
-			Format:          existing.Format,
-			Status:          existing.Status,
-			Synopsis:        existing.Synopsis,
-			CoverImage:      existing.CoverImage,
-			LastEditedScene: existing.LastEditedScene,
-			Stats: model.ProjectStats{
-				PageCount:  int(existing.PageCount),
-				WordCount:  int(existing.WordCount),
-				SceneCount: int(existing.SceneCount),
-			},
-			CreatedAt: existing.CreatedAt.Time,
-			UpdatedAt: existing.UpdatedAt.Time,
+			ID:         id,
+			UserID:     userID,
+			Title:      existing.Title,
+			Logline:    existing.Logline,
+			Genre:      existing.Genre,
+			Format:     existing.Format,
+			Status:     existing.Status,
+			Synopsis:   existing.Synopsis,
+			CoverImage: existing.CoverImage,
+			CreatedAt:  existing.CreatedAt.Time,
+			UpdatedAt:  existing.UpdatedAt.Time,
 		}
 		return &resp, nil
 	}
@@ -174,11 +162,6 @@ func (s *projectService) CreateScene(ctx context.Context, projectID, userID uuid
 	if err != nil {
 		return nil, err
 	}
-
-	// Update last edited scene
-	_, _ = s.projectRepo.Update(ctx, projectID, userID, model.UpdateProjectRequest{
-		LastEditedScene: &req.Slugline,
-	})
 
 	// Record activity
 	_, _ = s.activityRepo.Create(ctx, projectID, userID, "edited", "Scene Added", "Added scene "+req.Slugline, map[string]interface{}{
