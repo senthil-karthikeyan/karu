@@ -608,7 +608,7 @@ type mockActivityRepoForLegacy struct{}
 func (m *mockActivityRepoForLegacy) Create(ctx context.Context, projectID, userID uuid.UUID, actType, title, desc string, metadata map[string]interface{}) (*model.ActivityItem, error) { return nil, nil }
 func (m *mockActivityRepoForLegacy) ListByProjectID(ctx context.Context, projectID uuid.UUID) ([]model.ActivityItem, error) { return []model.ActivityItem{}, nil }
 
-func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
+func TestUnifiedProjectMetadataAndCanonicalScreenplayRelationship(t *testing.T) {
 	ctx := context.Background()
 	ownerID := uuid.New()
 	projectID := uuid.New()
@@ -661,32 +661,32 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 
 	projRepo := &mockProjectRepoForLegacy{
 		project: &generated.Project{
-			ID:                pgtype.UUID{Bytes: projectID, Valid: true},
-			UserID:            pgtype.UUID{Bytes: ownerID, Valid: true},
-			Title:             "Legacy Compatible Project",
-			CreatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
-			UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			ID:        pgtype.UUID{Bytes: projectID, Valid: true},
+			UserID:    pgtype.UUID{Bytes: ownerID, Valid: true},
+			Title:     "Unified Architecture Project",
+			CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		},
 		projResp: &model.ProjectResponse{
 			ID:     projectID,
 			UserID: ownerID,
-			Title:  "Legacy Compatible Project",
+			Title:  "Unified Architecture Project",
 		},
 	}
 
 	projSvc := NewProjectService(projRepo, &mockSceneRepoForLegacy{}, &mockActivityRepoForLegacy{}, screenplayRepo)
 
-	// 1. Test GetProject returns project details
+	// 1. Test GetProject returns project metadata
 	projDetail, err := projSvc.GetProject(ctx, projectID, ownerID)
 	if err != nil {
 		t.Fatalf("unexpected error fetching project: %v", err)
 	}
-	if projDetail.Title != "Legacy Compatible Project" {
-		t.Errorf("expected Title 'Legacy Compatible Project', got: %s", projDetail.Title)
+	if projDetail.Title != "Unified Architecture Project" {
+		t.Errorf("expected Title 'Unified Architecture Project', got: %s", projDetail.Title)
 	}
 
-	// 2. Test UpdateProject updates metadata
-	newTitle := "Updated Project Title"
+	// 2. Test UpdateProject updates project metadata only
+	newTitle := "Updated Unified Title"
 	updatedProj, err := projSvc.UpdateProject(ctx, projectID, ownerID, model.UpdateProjectRequest{
 		Title: &newTitle,
 	})
@@ -695,5 +695,14 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 	}
 	if updatedProj == nil {
 		t.Fatal("expected updated project response")
+	}
+
+	// 3. Test Screenplay Content is fetched via canonical screenplay endpoints
+	contentResp, err := screenplayRepo.GetContent(ctx, screenplayID)
+	if err != nil {
+		t.Fatalf("unexpected error fetching canonical content: %v", err)
+	}
+	if contentResp.Content != contentStore {
+		t.Errorf("expected content %s, got %s", contentStore, contentResp.Content)
 	}
 }
