@@ -23,7 +23,6 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateUserEncryptionMetadata(ctx context.Context, arg CreateUserEncryptionMetadataParams) (UserEncryptionMetadatum, error)
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
-	DeleteProjectKey(ctx context.Context, arg DeleteProjectKeyParams) error
 	DeleteScene(ctx context.Context, id pgtype.UUID) error
 	DeleteScenesByProjectID(ctx context.Context, projectID pgtype.UUID) error
 	DeleteScreenplay(ctx context.Context, id pgtype.UUID) error
@@ -35,7 +34,6 @@ type Querier interface {
 	GetLatestVersionNumber(ctx context.Context, screenplayID pgtype.UUID) (int32, error)
 	GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, error)
 	GetProjectByIDAndUserID(ctx context.Context, arg GetProjectByIDAndUserIDParams) (Project, error)
-	GetProjectKeyByProjectAndUser(ctx context.Context, arg GetProjectKeyByProjectAndUserParams) (ProjectKey, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetSceneByID(ctx context.Context, id pgtype.UUID) (Scene, error)
 	GetScreenplayByID(ctx context.Context, id pgtype.UUID) (GetScreenplayByIDRow, error)
@@ -63,7 +61,6 @@ type Querier interface {
 	UpdateScreenplayContentWithRevision(ctx context.Context, arg UpdateScreenplayContentWithRevisionParams) (UpdateScreenplayContentWithRevisionRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (UpdateUserPasswordRow, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (UpdateUserProfileRow, error)
-	UpsertProjectKey(ctx context.Context, arg UpsertProjectKeyParams) (ProjectKey, error)
 	UpsertScreenplayKey(ctx context.Context, arg UpsertScreenplayKeyParams) (ScreenplayKey, error)
 	UpsertUserEncryptionIdentity(ctx context.Context, arg UpsertUserEncryptionIdentityParams) (UserEncryptionIdentity, error)
 	UpsertUserEncryptionMetadata(ctx context.Context, arg UpsertUserEncryptionMetadataParams) (UserEncryptionMetadatum, error)

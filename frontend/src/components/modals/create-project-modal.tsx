@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Film, Sparkles, Image as ImageIcon } from "lucide-react";
 import { useCreateProjectMutation } from "@/hooks/use-projects";
 import { useEncryptionStore } from "@/stores/encryption-store";
+import { screenplaysApi } from "@/lib/api/screenplays";
 import type { Genre, ProjectFormat } from "@/types/screenplay";
 import {
   Dialog,
@@ -116,13 +117,16 @@ export function CreateProjectModal({
         coverImage: selectedPoster,
       });
 
-      // Initialize Project Encryption Key (PEK) if user encryption session is active
-      const { isUnlocked, createAndWrapProjectKey } = useEncryptionStore.getState();
+      // Initialize Default Screenplay Key (SCK) if user encryption session is active
+      const { isUnlocked, createAndWrapScreenplayKey } = useEncryptionStore.getState();
       if (isUnlocked) {
         try {
-          await createAndWrapProjectKey(newProject.id);
+          const defaultSp = await screenplaysApi.getDefaultScreenplay(newProject.id);
+          if (defaultSp?.id) {
+            await createAndWrapScreenplayKey(defaultSp.id);
+          }
         } catch (encErr) {
-          console.warn("Could not wrap project key upon creation:", encErr);
+          console.warn("Could not wrap default screenplay key upon creation:", encErr);
         }
       }
 

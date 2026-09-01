@@ -92,7 +92,7 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
     if (isEncrypted && isUnlocked && !screenplayKey && screenplayState?.id) {
       useEncryptionStore
         .getState()
-        .loadAndUnlockScreenplayKey(screenplayState.id, project.id)
+        .loadAndUnlockScreenplayKey(screenplayState.id)
         .catch((err) => {
           console.debug("Could not auto-unwrap screenplay key for preview:", err);
         });

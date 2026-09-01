@@ -81,41 +81,4 @@ export const projectsApi = {
       method: "DELETE",
     });
   },
-
-  async getProjectKey(id: string): Promise<{
-    projectId: string;
-    userId: string;
-    version: number;
-    algorithm: string;
-    iv: string;
-    wrappedKey: string;
-    createdAt: string;
-    updatedAt: string;
-  }> {
-    return apiClient(`/projects/${id}/key`);
-  },
-
-  async setProjectKey(
-    id: string,
-    data: {
-      version: number;
-      algorithm: string;
-      iv: string;
-      wrappedKey: string;
-    }
-  ): Promise<{
-    projectId: string;
-    userId: string;
-    version: number;
-    algorithm: string;
-    iv: string;
-    wrappedKey: string;
-    createdAt: string;
-    updatedAt: string;
-  }> {
-    return apiClient(`/projects/${id}/key`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
 };

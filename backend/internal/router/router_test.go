@@ -152,12 +152,6 @@ func (m *mockProjectService) DeleteScene(ctx context.Context, projectID, sceneID
 func (m *mockProjectService) ListActivities(ctx context.Context, projectID, userID uuid.UUID) ([]model.ActivityItem, error) {
 	return m.listActivitiesFunc(ctx, projectID, userID)
 }
-func (m *mockProjectService) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
-	return nil, nil
-}
-func (m *mockProjectService) SetProjectKey(ctx context.Context, projectID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ProjectKeyResponse, error) {
-	return nil, nil
-}
 
 // Mock ScreenplayService
 type mockScreenplayService struct {

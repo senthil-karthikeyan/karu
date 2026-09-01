@@ -567,7 +567,6 @@ func TestScreenplayKeyLifecycleAndIsolation(t *testing.T) {
 
 type mockProjectRepoForLegacy struct {
 	project   *generated.Project
-	key       *model.ProjectKeyResponse
 	projResp  *model.ProjectResponse
 	updateErr error
 }
@@ -596,29 +595,6 @@ func (m *mockProjectRepoForLegacy) Update(ctx context.Context, id, userID uuid.U
 func (m *mockProjectRepoForLegacy) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	return nil
 }
-func (m *mockProjectRepoForLegacy) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
-	if m.key != nil {
-		return m.key, nil
-	}
-	return nil, model.ErrNotFound
-}
-func (m *mockProjectRepoForLegacy) UpsertProjectKey(ctx context.Context, projectID, userID uuid.UUID, wrappedKey, iv, algo string, ver int) (*model.ProjectKeyResponse, error) {
-	m.key = &model.ProjectKeyResponse{
-		ProjectID:  projectID,
-		UserID:     userID,
-		Version:    ver,
-		Algorithm:  algo,
-		IV:         iv,
-		WrappedKey: wrappedKey,
-		CreatedAt:  time.Now(),
-		UpdatedAt:  time.Now(),
-	}
-	return m.key, nil
-}
-func (m *mockProjectRepoForLegacy) DeleteProjectKey(ctx context.Context, projectID, userID uuid.UUID) error {
-	m.key = nil
-	return nil
-}
 
 type mockSceneRepoForLegacy struct{}
 func (m *mockSceneRepoForLegacy) Create(ctx context.Context, projectID uuid.UUID, req model.CreateSceneRequest) (*model.SceneItem, error) { return nil, nil }
@@ -637,9 +613,6 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 	ownerID := uuid.New()
 	projectID := uuid.New()
 	screenplayID := uuid.New()
-
-	valid12ByteIV := base64.StdEncoding.EncodeToString([]byte("123456789012"))
-	validWrappedKey := base64.StdEncoding.EncodeToString([]byte("wrapped-sck-legacy-32-bytes"))
 
 	defaultSp := &model.ScreenplayResponse{
 		ID:          screenplayID,
@@ -684,20 +657,6 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 				UpdatedAt:    time.Now(),
 			}, nil
 		},
-		getScreenplayKeyFunc: func(ctx context.Context, sid, uid uuid.UUID) (*model.ScreenplayKeyResponse, error) {
-			if sid == screenplayID && uid == ownerID {
-				return &model.ScreenplayKeyResponse{
-					ScreenplayID: sid,
-					Version:      1,
-					Algorithm:    "AES-GCM",
-					IV:           valid12ByteIV,
-					WrappedKey:   validWrappedKey,
-					CreatedAt:    time.Now(),
-					UpdatedAt:    time.Now(),
-				}, nil
-			}
-			return nil, model.ErrNotFound
-		},
 	}
 
 	projRepo := &mockProjectRepoForLegacy{
@@ -737,14 +696,5 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 	}
 	if updatedProj == nil {
 		t.Fatal("expected updated project response")
-	}
-
-	// 3. Test GetProjectKey falls back to default screenplay key if project key is missing
-	keyResp, err := projSvc.GetProjectKey(ctx, projectID, ownerID)
-	if err != nil {
-		t.Fatalf("unexpected error resolving fallback project key: %v", err)
-	}
-	if keyResp.WrappedKey != validWrappedKey {
-		t.Errorf("expected fallback key %s, got %s", validWrappedKey, keyResp.WrappedKey)
 	}
 }

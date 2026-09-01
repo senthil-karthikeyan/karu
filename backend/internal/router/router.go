@@ -89,10 +89,6 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 				projects.PATCH("/:id", deps.ProjectHandler.UpdateProject)
 				projects.DELETE("/:id", deps.ProjectHandler.DeleteProject)
 
-				// Project Key Management (E2EE PEK)
-				projects.GET("/:id/key", deps.ProjectHandler.GetProjectKey)
-				projects.POST("/:id/key", deps.ProjectHandler.SetProjectKey)
-
 				// Scene endpoints
 				projects.GET("/:id/scenes", deps.ProjectHandler.ListScenes)
 				projects.POST("/:id/scenes", deps.ProjectHandler.CreateScene)

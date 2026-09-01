@@ -59,18 +59,6 @@ type WrappedKeyPayload struct {
 	WrappedKey string `json:"wrappedKey"` // Base64 encoded wrapped key bytes
 }
 
-// ProjectKeyResponse is returned when retrieving a user's wrapped Project Encryption Key (PEK).
-type ProjectKeyResponse struct {
-	ProjectID  uuid.UUID `json:"projectId"`
-	UserID     uuid.UUID `json:"userId"`
-	Version    int       `json:"version"`
-	Algorithm  string    `json:"algorithm"`
-	IV         string    `json:"iv"`
-	WrappedKey string    `json:"wrappedKey"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
-}
-
 // ScreenplayKeyResponse is returned when retrieving a wrapped key for a screenplay.
 type ScreenplayKeyResponse struct {
 	ScreenplayID uuid.UUID `json:"screenplayId"`

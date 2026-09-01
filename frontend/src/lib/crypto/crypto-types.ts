@@ -38,18 +38,10 @@ export interface WrappedKeyPayload {
 }
 
 /**
- * Project Encryption Key (PEK) wrapped by a user's UEK.
- */
-export interface WrappedProjectKeyPayload extends WrappedKeyPayload {
-  projectId: string;
-}
-
-/**
- * Screenplay Content Key (SCK) wrapped by a Project Encryption Key (PEK).
+ * Screenplay Content Key (SCK) wrapped by a User Encryption Key (UEK).
  */
 export interface WrappedScreenplayKeyPayload extends WrappedKeyPayload {
   screenplayId: string;
-  projectId?: string;
 }
 
 /**

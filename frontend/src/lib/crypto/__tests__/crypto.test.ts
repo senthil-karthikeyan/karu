@@ -19,12 +19,7 @@
 import {
   generateSalt,
   deriveUserEncryptionKey,
-  generateProjectEncryptionKey,
-  wrapProjectKeyWithUEK,
-  unwrapProjectKeyWithUEK,
   generateScreenplayContentKey,
-  wrapScreenplayKeyWithPEK,
-  unwrapScreenplayKeyWithPEK,
   wrapScreenplayContentKeyWithUEK,
   unwrapScreenplayContentKeyWithUEK,
   generateUserIdentityKeyPair,
@@ -202,31 +197,15 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
   });
 
   // 7. Key Hierarchy: Project Encryption Key (PEK) Wrapped by UEK
-  await test("Key Hierarchy: UEK wraps and unwraps Project Encryption Key (PEK)", async () => {
+  // 7. Canonical Key Hierarchy: Screenplay Content Key (SCK) Wrapped by UEK
+  await test("Canonical 2-Tier: UEK wraps and unwraps Screenplay Content Key (SCK)", async () => {
     const uek = await deriveUserEncryptionKey("user-passphrase", generateSalt(16), { iterations: 5000 });
-    const pek = await generateProjectEncryptionKey();
-
-    const wrappedPEK = await wrapProjectKeyWithUEK(uek, pek);
-    const unwrappedPEK = await unwrapProjectKeyWithUEK(uek, wrappedPEK);
-
-    // Verify unwrapped PEK by encrypting and decrypting
-    const message = stringToUtf8Bytes("PROJECT SCOPE SECRET");
-    const { iv, ciphertext } = await encryptAESGCM(pek, message);
-    const decrypted = await decryptAESGCM(unwrappedPEK, iv, ciphertext);
-
-    if (utf8BytesToString(decrypted) !== "PROJECT SCOPE SECRET") {
-      throw new Error("Unwrapped PEK failed to decrypt data encrypted by original PEK.");
-    }
-  });
-
-  // 8. Key Hierarchy: Screenplay Content Key (SCK) Wrapped by PEK
-  await test("Key Hierarchy: PEK wraps and unwraps Screenplay Content Key (SCK)", async () => {
-    const pek = await generateProjectEncryptionKey();
     const sck = await generateScreenplayContentKey();
 
-    const wrappedSCK = await wrapScreenplayKeyWithPEK(pek, sck);
-    const unwrappedSCK = await unwrapScreenplayKeyWithPEK(pek, wrappedSCK);
+    const wrappedSCK = await wrapScreenplayContentKeyWithUEK(uek, sck);
+    const unwrappedSCK = await unwrapScreenplayContentKeyWithUEK(uek, wrappedSCK);
 
+    // Verify unwrapped SCK by encrypting and decrypting
     const message = stringToUtf8Bytes("SCREENPLAY SCENE ACTION");
     const { iv, ciphertext } = await encryptAESGCM(sck, message);
     const decrypted = await decryptAESGCM(unwrappedSCK, iv, ciphertext);
@@ -236,22 +215,38 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     }
   });
 
-  // 9. Full 3-Tier Key Hierarchy E2EE Chain
-  await test("Key Hierarchy: Full 3-Tier Chain (Passphrase -> UEK -> PEK -> SCK -> Content)", async () => {
-    // Tier 1: User derives UEK from master secret
+  // 8. Key Hierarchy: Wrapped Key Tamper Detection
+  await test("Canonical 2-Tier: SCK unwrapping rejects tampered payload or wrong UEK", async () => {
+    const uek = await deriveUserEncryptionKey("correct-passphrase", generateSalt(16), { iterations: 5000 });
+    const wrongUEK = await deriveUserEncryptionKey("wrong-passphrase", generateSalt(16), { iterations: 5000 });
+    const sck = await generateScreenplayContentKey();
+
+    const wrappedSCK = await wrapScreenplayContentKeyWithUEK(uek, sck);
+
+    let rejectedWrongKey = false;
+    try {
+      await unwrapScreenplayContentKeyWithUEK(wrongUEK, wrappedSCK);
+    } catch {
+      rejectedWrongKey = true;
+    }
+
+    if (!rejectedWrongKey) {
+      throw new Error("Expected unwrapping to fail with wrong UEK!");
+    }
+  });
+
+  // 9. Full Canonical 2-Tier Chain (Passphrase -> UEK -> SCK -> Content)
+  await test("Canonical 2-Tier: Full Chain (Passphrase -> UEK -> SCK -> Content)", async () => {
+    // 1. User derives UEK from master secret
     const secret = "super-secret-filmmaker-key-2026";
     const salt = generateSalt(16);
     const uek = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
 
-    // Tier 2: Project generates PEK and wraps with UEK
-    const pek = await generateProjectEncryptionKey();
-    const wrappedPEK = await wrapProjectKeyWithUEK(uek, pek);
-
-    // Tier 3: Screenplay generates SCK and wraps with PEK
+    // 2. Screenplay generates SCK and wraps directly with UEK
     const sck = await generateScreenplayContentKey();
-    const wrappedSCK = await wrapScreenplayKeyWithPEK(pek, sck);
+    const wrappedSCK = await wrapScreenplayContentKeyWithUEK(uek, sck);
 
-    // Content: Screenplay encrypted with SCK
+    // 3. Content: Screenplay encrypted with SCK
     const tipTapDoc: TipTapDocumentJSON = {
       type: "doc",
       content: [
@@ -268,17 +263,14 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     // 1. Re-derive UEK from secret
     const restoredUEK = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
 
-    // 2. Unwrap PEK using UEK
-    const restoredPEK = await unwrapProjectKeyWithUEK(restoredUEK, wrappedPEK);
+    // 2. Unwrap SCK directly using UEK
+    const restoredSCK = await unwrapScreenplayContentKeyWithUEK(restoredUEK, wrappedSCK);
 
-    // 3. Unwrap SCK using PEK
-    const restoredSCK = await unwrapScreenplayKeyWithPEK(restoredPEK, wrappedSCK);
-
-    // 4. Decrypt Screenplay Content using SCK
+    // 3. Decrypt Screenplay Content using SCK
     const decryptedDoc = await decryptScreenplayContent(encryptedContent, restoredSCK);
 
     if (JSON.stringify(decryptedDoc) !== JSON.stringify(tipTapDoc)) {
-      throw new Error("Full 3-tier hierarchy decryption mismatch!");
+      throw new Error("Full 2-tier canonical chain decryption mismatch!");
     }
   });
 
@@ -600,48 +592,7 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     }
   });
 
-  // 17. E2EE Migration: Seamless 3-Tier (PEK) to 2-Tier (Direct UEK) SCK Re-wrapping
-  await test("E2EE Migration: Seamless 3-Tier (PEK) to 2-Tier (Direct UEK) SCK Re-wrapping", async () => {
-    const secret = "legacy-writer-secret";
-    const salt = generateSalt(16);
-    const uek = await deriveUserEncryptionKey(secret, salt, { iterations: 5000 });
-
-    // Old 3-Tier: PEK wrapped with UEK, SCK wrapped with PEK
-    const pek = await generateProjectEncryptionKey();
-    const legacyWrappedPEK = await wrapProjectKeyWithUEK(uek, pek);
-    const sck = await generateScreenplayContentKey();
-    const legacyWrappedSCK = await wrapScreenplayKeyWithPEK(pek, sck);
-
-    // Document encrypted with SCK
-    const doc: TipTapDocumentJSON = {
-      type: "doc",
-      content: [
-        {
-          type: "sceneHeading",
-          content: [{ type: "text", text: "EXT. RETROFITTED CINEMA - DAY" }],
-        },
-      ],
-    };
-    const encrypted = await encryptScreenplayContent(doc, sck);
-
-    // --- MIGRATION SIMULATION ---
-    // 1. Unwrap PEK using UEK
-    const unwrappedPEK = await unwrapProjectKeyWithUEK(uek, legacyWrappedPEK);
-    // 2. Unwrap legacy SCK using PEK
-    const unwrappedSCK = await unwrapScreenplayKeyWithPEK(unwrappedPEK, legacyWrappedSCK);
-    // 3. Re-wrap SCK directly using UEK (New 2-Tier)
-    const new2TierWrappedSCK = await wrapScreenplayContentKeyWithUEK(uek, unwrappedSCK);
-
-    // Verify the newly wrapped key un-wraps directly with UEK and decrypts the document
-    const restoredSCK = await unwrapScreenplayContentKeyWithUEK(uek, new2TierWrappedSCK);
-    const decryptedDoc = await decryptScreenplayContent(encrypted, restoredSCK);
-
-    if (JSON.stringify(decryptedDoc) !== JSON.stringify(doc)) {
-      throw new Error("Migrated 2-tier key failed to decrypt existing document!");
-    }
-  });
-
-  // 18. Multi-Screenplay Isolation: Distinct SCKs per screenplay in the same user / project context
+  // 17. Multi-Screenplay Isolation: Distinct SCKs per screenplay in the same user / project context
   await test("Multi-Screenplay Isolation: Screenplay 1 and Screenplay 2 maintain independent SCKs and cannot cross-decrypt", async () => {
     const secret = "writer-multi-script-secret";
     const salt = generateSalt(16);

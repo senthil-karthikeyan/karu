@@ -23,10 +23,6 @@ type ProjectService interface {
 	DeleteScene(ctx context.Context, projectID, sceneID, userID uuid.UUID) error
 
 	ListActivities(ctx context.Context, projectID, userID uuid.UUID) ([]model.ActivityItem, error)
-
-	// Project Encryption Keys (PEK)
-	GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error)
-	SetProjectKey(ctx context.Context, projectID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ProjectKeyResponse, error)
 }
 
 type projectService struct {
@@ -227,74 +223,4 @@ func (s *projectService) ListActivities(ctx context.Context, projectID, userID u
 		return nil, err
 	}
 	return s.activityRepo.ListByProjectID(ctx, projectID)
-}
-
-func (s *projectService) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
-	_, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	key, err := s.projectRepo.GetProjectKey(ctx, projectID, userID)
-	if err == nil && key != nil {
-		return key, nil
-	}
-
-	// Fallback to default screenplay key if project key is missing
-	if s.screenplayRepo != nil {
-		sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, projectID, userID)
-		if err == nil && sp != nil {
-			spKey, err := s.screenplayRepo.GetScreenplayKey(ctx, sp.ID, userID)
-			if err == nil && spKey != nil {
-				return &model.ProjectKeyResponse{
-					ProjectID:  projectID,
-					UserID:     userID,
-					Version:    spKey.Version,
-					Algorithm:  spKey.Algorithm,
-					IV:         spKey.IV,
-					WrappedKey: spKey.WrappedKey,
-					CreatedAt:  spKey.CreatedAt,
-					UpdatedAt:  spKey.UpdatedAt,
-				}, nil
-			}
-		}
-	}
-
-	return nil, model.ErrNotFound
-}
-
-func (s *projectService) SetProjectKey(ctx context.Context, projectID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ProjectKeyResponse, error) {
-	_, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := model.ValidateWrappedKeyPayload(req); err != nil {
-		return nil, err
-	}
-
-	algo := req.Algorithm
-	if algo == "" {
-		algo = model.ExpectedEncryptionAlgorithm
-	}
-
-	version := req.Version
-	if version == 0 {
-		version = model.ExpectedEncryptionVersion
-	}
-
-	resp, err := s.projectRepo.UpsertProjectKey(ctx, projectID, userID, req.WrappedKey, req.IV, algo, version)
-	if err != nil {
-		return nil, err
-	}
-
-	// Also sync to default screenplay key
-	if s.screenplayRepo != nil {
-		sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, projectID, userID)
-		if err == nil && sp != nil {
-			_, _ = s.screenplayRepo.UpsertScreenplayKey(ctx, sp.ID, userID, req.WrappedKey, req.IV, algo, version)
-		}
-	}
-
-	return resp, nil
 }

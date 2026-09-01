@@ -279,7 +279,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       const targetId = activeScreenplayId || project.id;
       useEncryptionStore
         .getState()
-        .loadAndUnlockScreenplayKey(targetId, project.id)
+        .loadAndUnlockScreenplayKey(targetId)
         .catch((err) => {
           console.debug("No existing wrapped key found or unable to unwrap:", err);
         });
@@ -548,7 +548,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             useEncryptionStore.getState().screenplayKeys[project.id];
           if (!key) {
             try {
-              key = await useEncryptionStore.getState().loadAndUnlockScreenplayKey(targetId, project.id);
+              key = await useEncryptionStore.getState().loadAndUnlockScreenplayKey(targetId);
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message.toLowerCase() : "";
               const statusCode =

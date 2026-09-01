@@ -19,11 +19,6 @@ type ProjectRepository interface {
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]model.ProjectResponse, error)
 	Update(ctx context.Context, id, userID uuid.UUID, req model.UpdateProjectRequest) (*model.ProjectResponse, error)
 	Delete(ctx context.Context, id, userID uuid.UUID) error
-
-	// Project Encryption Keys (PEK)
-	GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error)
-	UpsertProjectKey(ctx context.Context, projectID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ProjectKeyResponse, error)
-	DeleteProjectKey(ctx context.Context, projectID, userID uuid.UUID) error
 }
 
 type projectRepository struct {
@@ -193,60 +188,4 @@ func (r *projectRepository) Delete(ctx context.Context, id, userID uuid.UUID) er
 		return err
 	}
 	return nil
-}
-
-func (r *projectRepository) GetProjectKey(ctx context.Context, projectID, userID uuid.UUID) (*model.ProjectKeyResponse, error) {
-	k, err := r.queries.GetProjectKeyByProjectAndUser(ctx, generated.GetProjectKeyByProjectAndUserParams{
-		ProjectID: uuidToPgtype(projectID),
-		UserID:    uuidToPgtype(userID),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, model.ErrNotFound
-		}
-		return nil, err
-	}
-
-	return &model.ProjectKeyResponse{
-		ProjectID:  pgtypeToUUID(k.ProjectID),
-		UserID:     pgtypeToUUID(k.UserID),
-		Version:    int(k.Version),
-		Algorithm:  k.Algorithm,
-		IV:         k.KeyIv,
-		WrappedKey: k.WrappedKey,
-		CreatedAt:  pgtypeToTime(k.CreatedAt),
-		UpdatedAt:  pgtypeToTime(k.UpdatedAt),
-	}, nil
-}
-
-func (r *projectRepository) UpsertProjectKey(ctx context.Context, projectID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ProjectKeyResponse, error) {
-	k, err := r.queries.UpsertProjectKey(ctx, generated.UpsertProjectKeyParams{
-		ProjectID:  uuidToPgtype(projectID),
-		UserID:     uuidToPgtype(userID),
-		WrappedKey: wrappedKey,
-		KeyIv:      keyIV,
-		Algorithm:  algorithm,
-		Version:    int32(version),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &model.ProjectKeyResponse{
-		ProjectID:  pgtypeToUUID(k.ProjectID),
-		UserID:     pgtypeToUUID(k.UserID),
-		Version:    int(k.Version),
-		Algorithm:  k.Algorithm,
-		IV:         k.KeyIv,
-		WrappedKey: k.WrappedKey,
-		CreatedAt:  pgtypeToTime(k.CreatedAt),
-		UpdatedAt:  pgtypeToTime(k.UpdatedAt),
-	}, nil
-}
-
-func (r *projectRepository) DeleteProjectKey(ctx context.Context, projectID, userID uuid.UUID) error {
-	return r.queries.DeleteProjectKey(ctx, generated.DeleteProjectKeyParams{
-		ProjectID: uuidToPgtype(projectID),
-		UserID:    uuidToPgtype(userID),
-	})
 }
