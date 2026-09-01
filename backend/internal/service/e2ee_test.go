@@ -593,12 +593,6 @@ func (m *mockProjectRepoForLegacy) ListByUserID(ctx context.Context, userID uuid
 func (m *mockProjectRepoForLegacy) Update(ctx context.Context, id, userID uuid.UUID, req model.UpdateProjectRequest) (*model.ProjectResponse, error) {
 	return m.projResp, m.updateErr
 }
-func (m *mockProjectRepoForLegacy) UpdateContent(ctx context.Context, id, userID uuid.UUID, content string, pageCount, wordCount, sceneCount int32, lastEdited string) (*model.ProjectResponse, error) {
-	if m.project != nil {
-		m.project.ScreenplayContent = content
-	}
-	return m.projResp, m.updateErr
-}
 func (m *mockProjectRepoForLegacy) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	return nil
 }
@@ -724,25 +718,25 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 
 	projSvc := NewProjectService(projRepo, &mockSceneRepoForLegacy{}, &mockActivityRepoForLegacy{}, screenplayRepo)
 
-	// 1. Test GetProject populates ScreenplayContent from canonical default screenplay
+	// 1. Test GetProject returns project details
 	projDetail, err := projSvc.GetProject(ctx, projectID, ownerID)
 	if err != nil {
 		t.Fatalf("unexpected error fetching project: %v", err)
 	}
-	if projDetail.ScreenplayContent != "<h2>INT. CANONICAL SCENE - DAY</h2>" {
-		t.Errorf("expected ScreenplayContent from default screenplay, got: %s", projDetail.ScreenplayContent)
+	if projDetail.Title != "Legacy Compatible Project" {
+		t.Errorf("expected Title 'Legacy Compatible Project', got: %s", projDetail.Title)
 	}
 
-	// 2. Test UpdateProject syncs content into canonical default screenplay
-	newContent := "<h2>INT. UPDATED SCENE - NIGHT</h2>"
-	_, err = projSvc.UpdateProject(ctx, projectID, ownerID, model.UpdateProjectRequest{
-		ScreenplayContent: &newContent,
+	// 2. Test UpdateProject updates metadata
+	newTitle := "Updated Project Title"
+	updatedProj, err := projSvc.UpdateProject(ctx, projectID, ownerID, model.UpdateProjectRequest{
+		Title: &newTitle,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error updating project: %v", err)
 	}
-	if contentStore != newContent || revisionStore != 4 {
-		t.Errorf("expected default screenplay to be updated to revision 4 with new content, got: revision=%d content=%v", revisionStore, contentStore)
+	if updatedProj == nil {
+		t.Fatal("expected updated project response")
 	}
 
 	// 3. Test GetProjectKey falls back to default screenplay key if project key is missing

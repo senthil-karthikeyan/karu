@@ -8,13 +8,12 @@ INSERT INTO projects (
     status,
     synopsis,
     cover_image,
-    screenplay_content,
     page_count,
     word_count,
     scene_count,
     last_edited_scene
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 RETURNING *;
 
@@ -44,18 +43,7 @@ SET
     status = COALESCE(NULLIF($7, ''), status),
     synopsis = COALESCE($8, synopsis),
     cover_image = COALESCE($9, cover_image),
-    updated_at = NOW()
-WHERE id = $1 AND user_id = $2
-RETURNING *;
-
--- name: UpdateProjectContent :one
-UPDATE projects
-SET
-    screenplay_content = $3,
-    page_count = $4,
-    word_count = $5,
-    scene_count = $6,
-    last_edited_scene = $7,
+    last_edited_scene = COALESCE($10, last_edited_scene),
     updated_at = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING *;

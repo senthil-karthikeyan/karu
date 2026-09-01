@@ -30,15 +30,16 @@ type AuthIdentity struct {
 }
 
 type Project struct {
-	ID                pgtype.UUID        `json:"id"`
-	UserID            pgtype.UUID        `json:"user_id"`
-	Title             string             `json:"title"`
-	Logline           string             `json:"logline"`
-	Genre             string             `json:"genre"`
-	Format            string             `json:"format"`
-	Status            string             `json:"status"`
-	Synopsis          string             `json:"synopsis"`
-	CoverImage        string             `json:"cover_image"`
+	ID         pgtype.UUID `json:"id"`
+	UserID     pgtype.UUID `json:"user_id"`
+	Title      string      `json:"title"`
+	Logline    string      `json:"logline"`
+	Genre      string      `json:"genre"`
+	Format     string      `json:"format"`
+	Status     string      `json:"status"`
+	Synopsis   string      `json:"synopsis"`
+	CoverImage string      `json:"cover_image"`
+	// DEPRECATED: Screenplay drafts are canonically stored in screenplay_contents table
 	ScreenplayContent string             `json:"screenplay_content"`
 	PageCount         int32              `json:"page_count"`
 	WordCount         int32              `json:"word_count"`

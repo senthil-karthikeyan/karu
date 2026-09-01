@@ -21,31 +21,29 @@ INSERT INTO projects (
     status,
     synopsis,
     cover_image,
-    screenplay_content,
     page_count,
     word_count,
     scene_count,
     last_edited_scene
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 `
 
 type CreateProjectParams struct {
-	UserID            pgtype.UUID `json:"user_id"`
-	Title             string      `json:"title"`
-	Logline           string      `json:"logline"`
-	Genre             string      `json:"genre"`
-	Format            string      `json:"format"`
-	Status            string      `json:"status"`
-	Synopsis          string      `json:"synopsis"`
-	CoverImage        string      `json:"cover_image"`
-	ScreenplayContent string      `json:"screenplay_content"`
-	PageCount         int32       `json:"page_count"`
-	WordCount         int32       `json:"word_count"`
-	SceneCount        int32       `json:"scene_count"`
-	LastEditedScene   string      `json:"last_edited_scene"`
+	UserID          pgtype.UUID `json:"user_id"`
+	Title           string      `json:"title"`
+	Logline         string      `json:"logline"`
+	Genre           string      `json:"genre"`
+	Format          string      `json:"format"`
+	Status          string      `json:"status"`
+	Synopsis        string      `json:"synopsis"`
+	CoverImage      string      `json:"cover_image"`
+	PageCount       int32       `json:"page_count"`
+	WordCount       int32       `json:"word_count"`
+	SceneCount      int32       `json:"scene_count"`
+	LastEditedScene string      `json:"last_edited_scene"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -58,7 +56,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.Status,
 		arg.Synopsis,
 		arg.CoverImage,
-		arg.ScreenplayContent,
 		arg.PageCount,
 		arg.WordCount,
 		arg.SceneCount,
@@ -220,21 +217,23 @@ SET
     status = COALESCE(NULLIF($7, ''), status),
     synopsis = COALESCE($8, synopsis),
     cover_image = COALESCE($9, cover_image),
+    last_edited_scene = COALESCE($10, last_edited_scene),
     updated_at = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
-	ID         pgtype.UUID `json:"id"`
-	UserID     pgtype.UUID `json:"user_id"`
-	Column3    interface{} `json:"column_3"`
-	Logline    string      `json:"logline"`
-	Column5    interface{} `json:"column_5"`
-	Column6    interface{} `json:"column_6"`
-	Column7    interface{} `json:"column_7"`
-	Synopsis   string      `json:"synopsis"`
-	CoverImage string      `json:"cover_image"`
+	ID              pgtype.UUID `json:"id"`
+	UserID          pgtype.UUID `json:"user_id"`
+	Column3         interface{} `json:"column_3"`
+	Logline         string      `json:"logline"`
+	Column5         interface{} `json:"column_5"`
+	Column6         interface{} `json:"column_6"`
+	Column7         interface{} `json:"column_7"`
+	Synopsis        string      `json:"synopsis"`
+	CoverImage      string      `json:"cover_image"`
+	LastEditedScene string      `json:"last_edited_scene"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -248,60 +247,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Column7,
 		arg.Synopsis,
 		arg.CoverImage,
-	)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Title,
-		&i.Logline,
-		&i.Genre,
-		&i.Format,
-		&i.Status,
-		&i.Synopsis,
-		&i.CoverImage,
-		&i.ScreenplayContent,
-		&i.PageCount,
-		&i.WordCount,
-		&i.SceneCount,
-		&i.LastEditedScene,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateProjectContent = `-- name: UpdateProjectContent :one
-UPDATE projects
-SET
-    screenplay_content = $3,
-    page_count = $4,
-    word_count = $5,
-    scene_count = $6,
-    last_edited_scene = $7,
-    updated_at = NOW()
-WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
-`
-
-type UpdateProjectContentParams struct {
-	ID                pgtype.UUID `json:"id"`
-	UserID            pgtype.UUID `json:"user_id"`
-	ScreenplayContent string      `json:"screenplay_content"`
-	PageCount         int32       `json:"page_count"`
-	WordCount         int32       `json:"word_count"`
-	SceneCount        int32       `json:"scene_count"`
-	LastEditedScene   string      `json:"last_edited_scene"`
-}
-
-func (q *Queries) UpdateProjectContent(ctx context.Context, arg UpdateProjectContentParams) (Project, error) {
-	row := q.db.QueryRow(ctx, updateProjectContent,
-		arg.ID,
-		arg.UserID,
-		arg.ScreenplayContent,
-		arg.PageCount,
-		arg.WordCount,
-		arg.SceneCount,
 		arg.LastEditedScene,
 	)
 	var i Project

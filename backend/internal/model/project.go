@@ -54,8 +54,7 @@ type ProjectResponse struct {
 
 type ProjectDetailResponse struct {
 	ProjectResponse
-	ScreenplayContent string      `json:"screenplayContent"`
-	Scenes            []SceneItem `json:"scenes"`
+	Scenes []SceneItem `json:"scenes"`
 }
 
 type CreateProjectRequest struct {
@@ -69,15 +68,14 @@ type CreateProjectRequest struct {
 }
 
 type UpdateProjectRequest struct {
-	Title             *string `json:"title"`
-	Logline           *string `json:"logline"`
-	Genre             *string `json:"genre"`
-	Format            *string `json:"format"`
-	Status            *string `json:"status"`
-	Synopsis          *string `json:"synopsis"`
-	CoverImage        *string `json:"coverImage"`
-	ScreenplayContent *string `json:"screenplayContent"`
-	LastEditedScene   *string `json:"lastEditedScene"`
+	Title           *string `json:"title"`
+	Logline         *string `json:"logline"`
+	Genre           *string `json:"genre"`
+	Format          *string `json:"format"`
+	Status          *string `json:"status"`
+	Synopsis        *string `json:"synopsis"`
+	CoverImage      *string `json:"coverImage"`
+	LastEditedScene *string `json:"lastEditedScene"`
 }
 
 type CreateSceneRequest struct {

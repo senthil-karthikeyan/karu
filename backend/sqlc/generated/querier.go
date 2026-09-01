@@ -58,7 +58,6 @@ type Querier interface {
 	UpdateAuthIdentityPassword(ctx context.Context, arg UpdateAuthIdentityPasswordParams) (AuthIdentity, error)
 	UpdateEncryptedScreenplayContentWithRevision(ctx context.Context, arg UpdateEncryptedScreenplayContentWithRevisionParams) (UpdateEncryptedScreenplayContentWithRevisionRow, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
-	UpdateProjectContent(ctx context.Context, arg UpdateProjectContentParams) (Project, error)
 	UpdateScene(ctx context.Context, arg UpdateSceneParams) (Scene, error)
 	UpdateScreenplay(ctx context.Context, arg UpdateScreenplayParams) (UpdateScreenplayRow, error)
 	UpdateScreenplayContentWithRevision(ctx context.Context, arg UpdateScreenplayContentWithRevisionParams) (UpdateScreenplayContentWithRevisionRow, error)

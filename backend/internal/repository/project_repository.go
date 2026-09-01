@@ -18,7 +18,6 @@ type ProjectRepository interface {
 	GetByIDAndUserID(ctx context.Context, id, userID uuid.UUID) (*generated.Project, error)
 	ListByUserID(ctx context.Context, userID uuid.UUID) ([]model.ProjectResponse, error)
 	Update(ctx context.Context, id, userID uuid.UUID, req model.UpdateProjectRequest) (*model.ProjectResponse, error)
-	UpdateContent(ctx context.Context, id, userID uuid.UUID, content string, pageCount, wordCount, sceneCount int32, lastEditedScene string) (*model.ProjectResponse, error)
 	Delete(ctx context.Context, id, userID uuid.UUID) error
 
 	// Project Encryption Keys (PEK)
@@ -76,19 +75,18 @@ func (r *projectRepository) Create(ctx context.Context, userID uuid.UUID, req mo
 	}
 
 	p, err := r.queries.CreateProject(ctx, generated.CreateProjectParams{
-		UserID:            uuidToPgtype(userID),
-		Title:             req.Title,
-		Logline:           req.Logline,
-		Genre:             genre,
-		Format:            format,
-		Status:            status,
-		Synopsis:          req.Synopsis,
-		CoverImage:        req.CoverImage,
-		ScreenplayContent: "",
-		PageCount:         0,
-		WordCount:         0,
-		SceneCount:        0,
-		LastEditedScene:   "",
+		UserID:          uuidToPgtype(userID),
+		Title:           req.Title,
+		Logline:         req.Logline,
+		Genre:           genre,
+		Format:          format,
+		Status:          status,
+		Synopsis:        req.Synopsis,
+		CoverImage:      req.CoverImage,
+		PageCount:       0,
+		WordCount:       0,
+		SceneCount:      0,
+		LastEditedScene: "",
 	})
 	if err != nil {
 		return nil, err
@@ -137,7 +135,7 @@ func (r *projectRepository) ListByUserID(ctx context.Context, userID uuid.UUID) 
 }
 
 func (r *projectRepository) Update(ctx context.Context, id, userID uuid.UUID, req model.UpdateProjectRequest) (*model.ProjectResponse, error) {
-	var title, logline, genre, format, status, synopsis, coverImage string
+	var title, logline, genre, format, status, synopsis, coverImage, lastEditedScene string
 	if req.Title != nil {
 		title = *req.Title
 	}
@@ -159,38 +157,21 @@ func (r *projectRepository) Update(ctx context.Context, id, userID uuid.UUID, re
 	if req.CoverImage != nil {
 		coverImage = *req.CoverImage
 	}
-
-	p, err := r.queries.UpdateProject(ctx, generated.UpdateProjectParams{
-		ID:         uuidToPgtype(id),
-		UserID:     uuidToPgtype(userID),
-		Column3:    title,
-		Logline:    logline,
-		Column5:    genre,
-		Column6:    format,
-		Column7:    status,
-		Synopsis:   synopsis,
-		CoverImage: coverImage,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, model.ErrNotFound
-		}
-		return nil, err
+	if req.LastEditedScene != nil {
+		lastEditedScene = *req.LastEditedScene
 	}
 
-	resp := toProjectResponse(p)
-	return &resp, nil
-}
-
-func (r *projectRepository) UpdateContent(ctx context.Context, id, userID uuid.UUID, content string, pageCount, wordCount, sceneCount int32, lastEditedScene string) (*model.ProjectResponse, error) {
-	p, err := r.queries.UpdateProjectContent(ctx, generated.UpdateProjectContentParams{
-		ID:                uuidToPgtype(id),
-		UserID:            uuidToPgtype(userID),
-		ScreenplayContent: content,
-		PageCount:         pageCount,
-		WordCount:         wordCount,
-		SceneCount:        sceneCount,
-		LastEditedScene:   lastEditedScene,
+	p, err := r.queries.UpdateProject(ctx, generated.UpdateProjectParams{
+		ID:              uuidToPgtype(id),
+		UserID:          uuidToPgtype(userID),
+		Column3:         title,
+		Logline:         logline,
+		Column5:         genre,
+		Column6:         format,
+		Column7:         status,
+		Synopsis:        synopsis,
+		CoverImage:      coverImage,
+		LastEditedScene: lastEditedScene,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

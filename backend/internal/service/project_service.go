@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
@@ -51,24 +50,6 @@ func NewProjectService(
 	}
 }
 
-func calculateStats(content string, sceneCount int) (pageCount int32, wordCount int32) {
-	trimmed := strings.TrimSpace(content)
-	if trimmed == "" {
-		return 0, 0
-	}
-
-	words := strings.Fields(trimmed)
-	wCount := int32(len(words))
-
-	// Approximate screenplay pages: ~250 words per page
-	pCount := int32((len(words) / 250) + 1)
-	if pCount == 0 && len(words) > 0 {
-		pCount = 1
-	}
-
-	return pCount, wCount
-}
-
 func (s *projectService) CreateProject(ctx context.Context, userID uuid.UUID, req model.CreateProjectRequest) (*model.ProjectResponse, error) {
 	if strings.TrimSpace(req.Title) == "" {
 		return nil, model.ErrBadRequest
@@ -104,31 +85,6 @@ func (s *projectService) GetProject(ctx context.Context, id, userID uuid.UUID) (
 		return nil, err
 	}
 
-	content := p.ScreenplayContent
-	if s.screenplayRepo != nil {
-		sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, id, userID)
-		if err == nil && sp != nil {
-			spContent, err := s.screenplayRepo.GetContent(ctx, sp.ID)
-			if err == nil && spContent != nil {
-				if spContent.IsEncrypted {
-					encPayload := model.EncryptedPayload{
-						Version:    spContent.EncryptionVersion,
-						Algorithm:  spContent.Algorithm,
-						IV:         spContent.IV,
-						Ciphertext: spContent.Ciphertext,
-					}
-					if jsonBytes, err := json.Marshal(encPayload); err == nil {
-						content = string(jsonBytes)
-					}
-				} else if spContent.Content != nil {
-					if str, ok := spContent.Content.(string); ok {
-						content = str
-					}
-				}
-			}
-		}
-	}
-
 	return &model.ProjectDetailResponse{
 		ProjectResponse: model.ProjectResponse{
 			ID:              id,
@@ -149,8 +105,7 @@ func (s *projectService) GetProject(ctx context.Context, id, userID uuid.UUID) (
 			CreatedAt: p.CreatedAt.Time,
 			UpdatedAt: p.UpdatedAt.Time,
 		},
-		ScreenplayContent: content,
-		Scenes:            scenes,
+		Scenes: scenes,
 	}, nil
 }
 
@@ -167,55 +122,14 @@ func (s *projectService) UpdateProject(ctx context.Context, id, userID uuid.UUID
 
 	var updatedProject *model.ProjectResponse
 
-	// If metadata changed, update metadata
-	if req.Title != nil || req.Logline != nil || req.Genre != nil || req.Format != nil || req.Status != nil || req.Synopsis != nil || req.CoverImage != nil {
+	// If metadata or last edited scene changed, update metadata
+	if req.Title != nil || req.Logline != nil || req.Genre != nil || req.Format != nil || req.Status != nil || req.Synopsis != nil || req.CoverImage != nil || req.LastEditedScene != nil {
 		updatedProject, err = s.projectRepo.Update(ctx, id, userID, req)
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	// If content changed, calculate stats and update content
-	if req.ScreenplayContent != nil || req.LastEditedScene != nil {
-		content := existing.ScreenplayContent
-		if req.ScreenplayContent != nil {
-			content = *req.ScreenplayContent
-		}
-
-		lastEdited := existing.LastEditedScene
-		if req.LastEditedScene != nil {
-			lastEdited = *req.LastEditedScene
-		}
-
-		pageCount, wordCount := calculateStats(content, int(existing.SceneCount))
-		updatedProject, err = s.projectRepo.UpdateContent(ctx, id, userID, content, pageCount, wordCount, existing.SceneCount, lastEdited)
-		if err != nil {
-			return nil, err
-		}
-
-		// Sync to canonical default screenplay
-		if s.screenplayRepo != nil && req.ScreenplayContent != nil {
-			sp, err := s.screenplayRepo.GetDefaultScreenplayByProject(ctx, id, userID)
-			if err == nil && sp != nil {
-				spContent, err := s.screenplayRepo.GetContent(ctx, sp.ID)
-				revision := int64(1)
-				if err == nil && spContent != nil {
-					revision = spContent.Revision
-				}
-				encPayload, isEnc := model.ParseEncryptedPayloadString(*req.ScreenplayContent)
-				if isEnc && encPayload != nil {
-					_, _ = s.screenplayRepo.SaveEncryptedContentWithRevision(ctx, sp.ID, *encPayload, revision)
-				} else {
-					_, _ = s.screenplayRepo.SaveContentWithRevision(ctx, sp.ID, *req.ScreenplayContent, revision)
-				}
-			}
-		}
-
-		_, _ = s.activityRepo.Create(ctx, id, userID, "edited", "Screenplay Edited", "Updated screenplay content", map[string]interface{}{
-			"wordCount":  wordCount,
-			"pageCount":  pageCount,
-			"sceneCount": existing.SceneCount,
-		})
+		_, _ = s.activityRepo.Create(ctx, id, userID, "updated", "Project Updated", "Updated project metadata", nil)
 	}
 
 	if updatedProject == nil {
@@ -255,7 +169,7 @@ func (s *projectService) DeleteProject(ctx context.Context, id, userID uuid.UUID
 
 func (s *projectService) CreateScene(ctx context.Context, projectID, userID uuid.UUID, req model.CreateSceneRequest) (*model.SceneItem, error) {
 	// Verify project ownership
-	proj, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
+	_, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -265,9 +179,10 @@ func (s *projectService) CreateScene(ctx context.Context, projectID, userID uuid
 		return nil, err
 	}
 
-	// Update project scene count
-	newSceneCount := proj.SceneCount + 1
-	_, _ = s.projectRepo.UpdateContent(ctx, projectID, userID, proj.ScreenplayContent, proj.PageCount, proj.WordCount, newSceneCount, req.Slugline)
+	// Update last edited scene
+	_, _ = s.projectRepo.Update(ctx, projectID, userID, model.UpdateProjectRequest{
+		LastEditedScene: &req.Slugline,
+	})
 
 	// Record activity
 	_, _ = s.activityRepo.Create(ctx, projectID, userID, "edited", "Scene Added", "Added scene "+req.Slugline, map[string]interface{}{
@@ -294,7 +209,7 @@ func (s *projectService) UpdateScene(ctx context.Context, projectID, sceneID, us
 }
 
 func (s *projectService) DeleteScene(ctx context.Context, projectID, sceneID, userID uuid.UUID) error {
-	proj, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
+	_, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
 	if err != nil {
 		return err
 	}
@@ -302,12 +217,6 @@ func (s *projectService) DeleteScene(ctx context.Context, projectID, sceneID, us
 	if err := s.sceneRepo.Delete(ctx, sceneID); err != nil {
 		return err
 	}
-
-	newSceneCount := proj.SceneCount - 1
-	if newSceneCount < 0 {
-		newSceneCount = 0
-	}
-	_, _ = s.projectRepo.UpdateContent(ctx, projectID, userID, proj.ScreenplayContent, proj.PageCount, proj.WordCount, newSceneCount, proj.LastEditedScene)
 
 	return nil
 }
