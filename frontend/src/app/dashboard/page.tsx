@@ -48,8 +48,6 @@ export default function DashboardPage() {
     coverImage: p.coverImage,
     lastEditedScene: p.lastEditedScene,
     stats: p.stats || { pageCount: 0, wordCount: 0, sceneCount: 0 },
-    screenplayContent: "",
-    scenes: [],
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   }));

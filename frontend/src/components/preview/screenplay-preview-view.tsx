@@ -32,6 +32,7 @@ import {
   decryptScreenplayContent,
   tipTapJsonToHtml,
 } from "@/lib/crypto";
+import { screenplaysApi } from "@/lib/api/screenplays";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
 import { EncryptionBadge } from "@/components/crypto/encryption-badge";
 
@@ -46,34 +47,63 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
   const [decryptedHtml, setDecryptedHtml] = useState<string | null>(null);
+  const [screenplayState, setScreenplayState] = useState<{
+    id: string;
+    isEncrypted: boolean;
+    rawContent: string;
+    payload: ReturnType<typeof parseEncryptedPayloadString>;
+  } | null>(null);
 
   const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
-  const screenplayKey = useEncryptionStore((state) => state.screenplayKeys[project.id]);
+  const screenplayId = screenplayState?.id || project.id;
+  const screenplayKey = useEncryptionStore((state) => state.screenplayKeys[screenplayId]);
 
-  // Check if the underlying screenplay content is encrypted
-  const parsedPayload = useMemo(
-    () => parseEncryptedPayloadString(project.screenplayContent),
-    [project.screenplayContent]
-  );
-  const isEncrypted = !!parsedPayload;
+  // Load canonical default screenplay and its content
+  useEffect(() => {
+    let isMounted = true;
+    screenplaysApi
+      .getDefaultScreenplay(project.id)
+      .then(async (sp) => {
+        if (!isMounted) return;
+        const cnt = await screenplaysApi.getContent(sp.id);
+        if (!isMounted) return;
+        const raw = typeof cnt.content === "string" ? cnt.content : JSON.stringify(cnt.content);
+        const parsed = parseEncryptedPayloadString(raw);
+        setScreenplayState({
+          id: sp.id,
+          isEncrypted: !!parsed,
+          rawContent: raw,
+          payload: parsed,
+        });
+      })
+      .catch((err) => {
+        console.error("Could not fetch default screenplay for preview:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [project.id]);
+
+  const isEncrypted = screenplayState?.isEncrypted ?? false;
 
   // Auto-attempt to load/unlock the key when encryption is unlocked
   useEffect(() => {
-    if (isEncrypted && isUnlocked && !screenplayKey) {
+    if (isEncrypted && isUnlocked && !screenplayKey && screenplayState?.id) {
       useEncryptionStore
         .getState()
-        .loadAndUnlockScreenplayKey(project.id, project.id)
+        .loadAndUnlockScreenplayKey(screenplayState.id, project.id)
         .catch((err) => {
           console.debug("Could not auto-unwrap screenplay key for preview:", err);
         });
     }
-  }, [isEncrypted, isUnlocked, screenplayKey, project.id]);
+  }, [isEncrypted, isUnlocked, screenplayKey, screenplayState?.id, project.id]);
 
   // Decrypt content when key is available in memory
   useEffect(() => {
-    if (!parsedPayload || !screenplayKey) return;
+    if (!screenplayState || !screenplayState.payload || !screenplayKey) return;
 
-    decryptScreenplayContent(parsedPayload, screenplayKey)
+    decryptScreenplayContent(screenplayState.payload, screenplayKey)
       .then((doc) => {
         const html = tipTapJsonToHtml(doc);
         setDecryptedHtml(html);
@@ -81,15 +111,15 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
       .catch((err) => {
         console.error("Failed to decrypt preview content:", err);
       });
-  }, [parsedPayload, screenplayKey]);
+  }, [screenplayState, screenplayKey]);
 
   // Effective content to render: decrypted HTML, or original plaintext if not encrypted
   const effectiveHtml = useMemo(() => {
     if (isEncrypted) {
       return decryptedHtml || "";
     }
-    return project.screenplayContent;
-  }, [isEncrypted, decryptedHtml, project.screenplayContent]);
+    return screenplayState?.rawContent || "";
+  }, [isEncrypted, decryptedHtml, screenplayState?.rawContent]);
 
   // Split screenplay content into accurate physical pages
   const pages = useMemo(() => {
@@ -351,10 +381,8 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
 
       {/* Export Dialog */}
       <ExportModal
-        project={{
-          ...project,
-          screenplayContent: effectiveHtml,
-        }}
+        project={project}
+        contentHtml={effectiveHtml}
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
       />

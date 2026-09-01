@@ -242,14 +242,14 @@ export function downloadFile(content: string, filename: string, mimeType: string
 /**
  * Main export handler supporting PDF (print), Fountain, and Plain Text
  */
-export function exportScreenplay(project: Project, options: ExportOptions) {
+export function exportScreenplay(project: Project, options: ExportOptions, contentHtml: string = "") {
   const sanitizedTitle = project.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
   if (options.format === "fountain") {
-    const fountainContent = htmlToFountain(project.screenplayContent, project);
+    const fountainContent = htmlToFountain(contentHtml, project);
     downloadFile(fountainContent, `${sanitizedTitle}.fountain`, "text/plain;charset=utf-8");
   } else if (options.format === "txt") {
-    const plainText = htmlToPlainText(project.screenplayContent, project);
+    const plainText = htmlToPlainText(contentHtml, project);
     downloadFile(plainText, `${sanitizedTitle}.txt`, "text/plain;charset=utf-8");
   } else if (options.format === "pdf") {
     if (typeof window !== "undefined") {

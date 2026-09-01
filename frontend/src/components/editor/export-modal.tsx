@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 
 interface ExportModalProps {
   project: Project;
+  contentHtml?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   trigger?: React.ReactNode;
@@ -28,6 +29,7 @@ interface ExportModalProps {
 
 export function ExportModal({
   project,
+  contentHtml,
   open: controlledOpen,
   onOpenChange: setControlledOpen,
   trigger,
@@ -55,7 +57,7 @@ export function ExportModal({
         includeSceneNumbers,
       };
 
-      exportScreenplay(project, options);
+      exportScreenplay(project, options, contentHtml || "");
 
       addActivity({
         projectId: project.id,

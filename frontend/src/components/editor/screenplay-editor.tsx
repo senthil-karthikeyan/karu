@@ -106,30 +106,26 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
-  const [currentHtml, setCurrentHtml] = useState<string>(project.screenplayContent);
-  const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes[0]?.id);
+  const [currentHtml, setCurrentHtml] = useState<string>("");
+  const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes?.[0]?.id);
 
   const [stats, setStats] = useState(project.stats);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Dynamic scenes computed from screenplay content
   const dynamicScenes = useMemo(() => {
-    return extractScenesFromHtml(currentHtml, project.scenes);
+    return extractScenesFromHtml(currentHtml, project.scenes || []);
   }, [currentHtml, project.scenes]);
 
-  // Determine initial editor content (plaintext or decrypted JSON)
+  // Determine initial editor content
   const isEncryptedPayload = useMemo(() => {
-    return !!parseEncryptedPayloadString(project.screenplayContent);
-  }, [project.screenplayContent]);
+    if (!screenplay) return false;
+    return !!parseEncryptedPayloadString(screenplay.content);
+  }, [screenplay]);
 
   const initialContent = useMemo(() => {
-    const parsedPayload = parseEncryptedPayloadString(project.screenplayContent);
-    if (!parsedPayload) {
-      return project.screenplayContent;
-    }
-    // If encrypted and not yet decrypted, show locked placeholder until unlocked
-    return `<p data-type="action">🔒 Encrypted screenplay draft. Please unlock your encryption session to view and write.</p>`;
-  }, [project.screenplayContent]);
+    return `<p data-type="action">Write your screenplay here...</p>`;
+  }, []);
 
   // Load canonical screenplay details on mount
   useEffect(() => {
@@ -265,17 +261,17 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
   // Attempt to load metadata and decrypt on mount
   useEffect(() => {
-    const isEncrypted = !!parseEncryptedPayloadString(project.screenplayContent);
-
-    useEncryptionStore
-      .getState()
-      .fetchUserMetadata()
-      .then(() => {
-        if (isEncrypted && !isUnlocked) {
+    if (!screenplay) return;
+    const isEncrypted = !!parseEncryptedPayloadString(screenplay.content);
+    if (isEncrypted && !isUnlocked) {
+      useEncryptionStore
+        .getState()
+        .fetchUserMetadata()
+        .then(() => {
           setEncryptionDialogOpen(true);
-        }
-      });
-  }, [project.screenplayContent, isUnlocked]);
+        });
+    }
+  }, [screenplay, isUnlocked]);
 
   // When unlocked, load the wrapped key for this screenplay if not already in memory
   useEffect(() => {
@@ -292,14 +288,12 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
   // Decrypt content when key becomes available in memory and unlock editor
   useEffect(() => {
-    if (!editor || !screenplayKey) return;
+    if (!editor || !screenplay) return;
 
-    const rawContent = screenplay?.content || project.screenplayContent;
-    const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
-    const parsedPayload = parseEncryptedPayloadString(contentStr);
-
-    if (parsedPayload) {
-      decryptScreenplayContent(parsedPayload, screenplayKey)
+    const parsed = parseEncryptedPayloadString(screenplay.content);
+    if (parsed) {
+      if (!screenplayKey) return;
+      decryptScreenplayContent(parsed, screenplayKey)
         .then((doc) => {
           const normalized = normalizeScreenplayDoc(doc);
           editor.commands.setContent(normalized);
@@ -308,10 +302,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         .catch((err) => {
           console.error("Failed to decrypt initial content:", err);
         });
+    } else if (screenplay.content) {
+      editor.commands.setContent(screenplay.content);
+      editor.setEditable(true);
     } else {
       editor.setEditable(true);
     }
-  }, [editor, screenplayKey, screenplay, project.screenplayContent]);
+  }, [editor, screenplayKey, screenplay]);
 
   // Handle format element buttons with semantic TipTap nodes
   const handleSetElementType = useCallback(
@@ -523,6 +520,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
         project={project}
+        contentHtml={editor?.getHTML() || ""}
       />
 
       {/* Version History & Checkpoints Modal */}
@@ -573,7 +571,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           }
 
           if (key && editor) {
-            const rawContent = screenplay?.content || project.screenplayContent;
+            const rawContent = screenplay?.content || "";
             const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
             const parsed = parseEncryptedPayloadString(contentStr);
             if (parsed) {

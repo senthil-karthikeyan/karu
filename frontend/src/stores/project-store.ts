@@ -29,9 +29,8 @@ interface ProjectStore {
   deleteProject: (id: string) => void;
   archiveProject: (id: string) => void;
 
-  updateScreenplayContent: (
+  updateProjectStats: (
     id: string,
-    content: string,
     stats?: { pageCount?: number; wordCount?: number; sceneCount?: number }
   ) => void;
 
@@ -84,7 +83,6 @@ export const useProjectStore = create<ProjectStore>()(
             wordCount: 0,
             sceneCount: 1,
           },
-          screenplayContent: `<h2 data-type="scene-heading">1. INT. OPENING SCENE - DAY</h2><p data-type="action">Write your opening action here...</p>`,
           scenes: [
             {
               id: `sc-${Date.now()}`,
@@ -169,17 +167,17 @@ export const useProjectStore = create<ProjectStore>()(
         });
       },
 
-      updateScreenplayContent: (id, content, stats) => {
+      updateProjectStats: (id, stats) => {
         set((state) => ({
           projects: state.projects.map((p) =>
             p.id === id
               ? {
                   ...p,
-                  screenplayContent: content,
                   updatedAt: new Date().toISOString(),
                   stats: {
-                    ...p.stats,
-                    ...(stats || {}),
+                    pageCount: stats?.pageCount ?? p.stats.pageCount,
+                    wordCount: stats?.wordCount ?? p.stats.wordCount,
+                    sceneCount: stats?.sceneCount ?? p.stats.sceneCount,
                   },
                 }
               : p

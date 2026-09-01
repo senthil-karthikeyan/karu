@@ -69,8 +69,7 @@ export interface Project {
     wordCount: number;
     sceneCount: number;
   };
-  screenplayContent: string;
-  scenes: SceneItem[];
+  scenes?: SceneItem[];
 }
 
 export interface UserProfile {

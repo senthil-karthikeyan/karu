@@ -24,8 +24,7 @@ export interface ProjectResponse {
 }
 
 export interface ProjectDetailResponse extends ProjectResponse {
-  screenplayContent: string;
-  scenes: SceneItem[];
+  scenes?: SceneItem[];
 }
 
 export interface CreateProjectRequest {
@@ -46,7 +45,6 @@ export interface UpdateProjectRequest {
   status?: string;
   synopsis?: string;
   coverImage?: string;
-  screenplayContent?: string;
   lastEditedScene?: string;
 }
 

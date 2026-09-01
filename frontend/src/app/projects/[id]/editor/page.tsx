@@ -63,16 +63,6 @@ export default function EditorPage({ params }: EditorPageProps) {
     coverImage: rawProject.coverImage,
     lastEditedScene: rawProject.lastEditedScene,
     stats: rawProject.stats || { pageCount: 0, wordCount: 0, sceneCount: 0 },
-    screenplayContent: rawProject.screenplayContent || "",
-    scenes: (rawProject.scenes || []).map((s) => ({
-      id: s.id,
-      number: s.number,
-      slugline: s.slugline,
-      location: s.location,
-      time: s.time as SceneItem["time"],
-      summary: s.summary,
-      pageNumber: s.pageNumber,
-    })),
     createdAt: rawProject.createdAt,
     updatedAt: rawProject.updatedAt,
   };
