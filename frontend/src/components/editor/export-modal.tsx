@@ -21,6 +21,11 @@ import { Label } from "@/components/ui/label";
 
 interface ExportModalProps {
   project: Project;
+  stats?: {
+    pageCount?: number;
+    wordCount?: number;
+    sceneCount?: number;
+  };
   contentHtml?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -29,6 +34,7 @@ interface ExportModalProps {
 
 export function ExportModal({
   project,
+  stats,
   contentHtml,
   open: controlledOpen,
   onOpenChange: setControlledOpen,
@@ -59,11 +65,12 @@ export function ExportModal({
 
       exportScreenplay(project, options, contentHtml || "");
 
+      const pageCount = stats?.pageCount || 1;
       addActivity({
         projectId: project.id,
         type: "exported",
         title: `Screenplay exported to ${format.toUpperCase()}`,
-        description: `Exported ${project.stats.pageCount} pages formatted for ${format.toUpperCase()}.`,
+        description: `Exported ${pageCount} pages formatted for ${format.toUpperCase()}.`,
         metadata: { format: format.toUpperCase() },
       });
 
@@ -199,7 +206,7 @@ export function ExportModal({
 
           <div className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground flex items-center justify-between">
             <span>Current script size:</span>
-            <span className="font-medium text-foreground">{project.stats.pageCount} Pages • {project.stats.wordCount.toLocaleString()} Words</span>
+            <span className="font-medium text-foreground">{stats?.pageCount || 1} Pages • {(stats?.wordCount || 0).toLocaleString()} Words</span>
           </div>
         </div>
 

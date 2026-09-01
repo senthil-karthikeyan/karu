@@ -162,6 +162,18 @@ export function useScreenplaysQuery(projectId?: string) {
   });
 }
 
+export function useDefaultScreenplayQuery(projectId?: string) {
+  return useQuery({
+    queryKey: ["projects", projectId, "default-screenplay"],
+    queryFn: () => {
+      if (!projectId) throw new Error("Project ID is required");
+      return screenplaysApi.getDefaultScreenplay(projectId);
+    },
+    enabled: !!projectId,
+    staleTime: 10 * 1000,
+  });
+}
+
 export function useCreateScreenplayMutation(projectId: string) {
   const queryClient = useQueryClient();
 

@@ -56,8 +56,6 @@ export default function PreviewPage({ params }: PreviewPageProps) {
     status: rawProject.status as Project["status"],
     synopsis: rawProject.synopsis,
     coverImage: rawProject.coverImage,
-    lastEditedScene: rawProject.lastEditedScene,
-    stats: rawProject.stats || { pageCount: 0, wordCount: 0, sceneCount: 0 },
     createdAt: rawProject.createdAt,
     updatedAt: rawProject.updatedAt,
   };

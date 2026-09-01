@@ -15,6 +15,11 @@ export interface ScreenplayResponse {
   projectId: string;
   title: string;
   description: string;
+  isDefault: boolean;
+  sortOrder: number;
+  wordCount: number;
+  pageCount: number;
+  sceneCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,21 +57,37 @@ export interface RestoreVersionResponse {
 export interface CreateScreenplayRequest {
   title: string;
   description?: string;
+  isDefault?: boolean;
+  sortOrder?: number;
+  wordCount?: number;
+  pageCount?: number;
+  sceneCount?: number;
 }
 
 export interface UpdateScreenplayRequest {
   title?: string;
   description?: string;
+  isDefault?: boolean;
+  sortOrder?: number;
+  wordCount?: number;
+  pageCount?: number;
+  sceneCount?: number;
 }
 
 export interface SaveContentRequest {
   content: string;
   revision: number;
+  wordCount?: number;
+  pageCount?: number;
+  sceneCount?: number;
 }
 
 export interface SaveEncryptedContentRequest {
   encryptedContent: EncryptedPayload;
   revision: number;
+  wordCount?: number;
+  pageCount?: number;
+  sceneCount?: number;
 }
 
 export interface CreateVersionRequest {
@@ -135,13 +156,14 @@ export const screenplaysApi = {
 
   /**
    * Client-side E2EE: Encrypts the TipTap document JSON using the provided SCK
-   * and dispatches the ciphertext payload to the backend without exposing plaintext.
+   * and dispatches the ciphertext payload with client-calculated statistics to the backend.
    */
   async saveEncryptedContent(
     id: string,
     doc: TipTapDocumentJSON,
     key: CryptoKey,
-    revision: number
+    revision: number,
+    stats?: { wordCount?: number; pageCount?: number; sceneCount?: number }
   ): Promise<ScreenplayContentResponse> {
     const encryptedPayload = await encryptScreenplayContent(doc, key);
     return apiClient<ScreenplayContentResponse>(`/screenplays/${id}/content`, {
@@ -149,6 +171,9 @@ export const screenplaysApi = {
       body: JSON.stringify({
         content: JSON.stringify(encryptedPayload),
         revision,
+        wordCount: stats?.wordCount,
+        pageCount: stats?.pageCount,
+        sceneCount: stats?.sceneCount,
       }),
     });
   },

@@ -52,6 +52,20 @@ export interface ActivityItem {
   };
 }
 
+export interface Screenplay {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  isDefault: boolean;
+  sortOrder: number;
+  wordCount: number;
+  pageCount: number;
+  sceneCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   title: string;
@@ -63,12 +77,6 @@ export interface Project {
   coverImage?: string;
   createdAt: string;
   updatedAt: string;
-  lastEditedScene?: string;
-  stats: {
-    pageCount: number;
-    wordCount: number;
-    sceneCount: number;
-  };
   scenes?: SceneItem[];
 }
 

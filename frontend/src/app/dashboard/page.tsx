@@ -46,8 +46,6 @@ export default function DashboardPage() {
     status: p.status as Project["status"],
     synopsis: p.synopsis,
     coverImage: p.coverImage,
-    lastEditedScene: p.lastEditedScene,
-    stats: p.stats || { pageCount: 0, wordCount: 0, sceneCount: 0 },
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   }));

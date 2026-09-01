@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { EncryptionBadge } from "@/components/crypto/encryption-badge";
+import { useDefaultScreenplayQuery } from "@/hooks/use-projects";
 
 interface ProjectOverviewProps {
   project: Project;
@@ -29,7 +30,13 @@ export function ProjectOverview({
   onOpenExport,
   onViewAllActivity,
 }: ProjectOverviewProps) {
+  const { data: defaultScreenplay } = useDefaultScreenplayQuery(project.id);
   const recentActivities = activities.slice(0, 3);
+
+  const wordCount = defaultScreenplay?.wordCount ?? 0;
+  const pageCount = defaultScreenplay?.pageCount ?? 1;
+  const sceneCount = defaultScreenplay?.sceneCount ?? 1;
+  const screenplayTitle = defaultScreenplay?.title || "Default Screenplay";
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto py-2">
@@ -84,10 +91,10 @@ export function ProjectOverview({
                 Continue Writing
               </span>
               <CardTitle className="text-lg font-semibold flex items-center justify-between">
-                <span>{project.lastEditedScene || "Scene 1: INT. OPENING - DAY"}</span>
+                <span>{screenplayTitle}</span>
               </CardTitle>
               <CardDescription>
-                Pick up right where you left off. {project.stats.wordCount.toLocaleString()} words drafted across {project.stats.pageCount} pages.
+                Pick up right where you left off. {wordCount.toLocaleString()} words drafted across {pageCount} pages.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -183,15 +190,15 @@ export function ProjectOverview({
             <CardContent className="space-y-2 text-xs">
               <div className="flex justify-between py-1 border-b border-border/60">
                 <span className="text-muted-foreground">Page Count:</span>
-                <span className="font-semibold">{project.stats.pageCount} Pages</span>
+                <span className="font-semibold">{pageCount} Pages</span>
               </div>
               <div className="flex justify-between py-1 border-b border-border/60">
                 <span className="text-muted-foreground">Word Count:</span>
-                <span className="font-semibold">{project.stats.wordCount.toLocaleString()} Words</span>
+                <span className="font-semibold">{wordCount.toLocaleString()} Words</span>
               </div>
               <div className="flex justify-between py-1 border-b border-border/60">
                 <span className="text-muted-foreground">Scenes:</span>
-                <span className="font-semibold">{project.stats.sceneCount} Scenes</span>
+                <span className="font-semibold">{sceneCount} Scenes</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-muted-foreground">Created:</span>

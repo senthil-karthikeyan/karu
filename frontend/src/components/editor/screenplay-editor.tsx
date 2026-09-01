@@ -16,7 +16,6 @@ import {
   PanelLeft,
 } from "lucide-react";
 import type { Project, SceneItem } from "@/types/screenplay";
-import { useUpdateProjectMutation } from "@/hooks/use-projects";
 import { screenplaysApi, type ScreenplayDetailResponse } from "@/lib/api/screenplays";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import {
@@ -89,7 +88,6 @@ function extractScenesFromHtml(html: string, fallbackScenes: SceneItem[]): Scene
 }
 
 export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
-  const updateProjectMutation = useUpdateProjectMutation(project.id);
   const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
 
   const [screenplay, setScreenplay] = useState<ScreenplayDetailResponse | null>(null);
@@ -109,7 +107,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const [currentHtml, setCurrentHtml] = useState<string>("");
   const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes?.[0]?.id);
 
-  const [stats, setStats] = useState(project.stats);
+  const [stats, setStats] = useState({ pageCount: 1, wordCount: 0, sceneCount: 1 });
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Dynamic scenes computed from screenplay content
@@ -139,6 +137,11 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         if (sp.revision) {
           setCurrentRevision(sp.revision);
         }
+        setStats({
+          pageCount: sp.pageCount || 1,
+          wordCount: sp.wordCount || 0,
+          sceneCount: sp.sceneCount || 1,
+        });
       })
       .catch((err) => {
         console.debug("Default screenplay lookup:", err);
@@ -190,10 +193,20 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       const html = currentEditor.getHTML();
       setCurrentHtml(html);
 
-      // Compute word count
+      // Compute statistics locally from TipTap AST and text
       const text = currentEditor.getText();
       const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-      setStats((prev) => ({ ...prev, wordCount: words }));
+      let sceneCount = 0;
+      currentEditor.state.doc.descendants((node) => {
+        if (
+          node.type.name === "sceneHeading" ||
+          (node.type.name === "heading" && node.attrs?.dataType === "scene-heading")
+        ) {
+          sceneCount++;
+        }
+      });
+      const currentPageCount = stats.pageCount || 1;
+      setStats((prev) => ({ ...prev, wordCount: words, sceneCount: sceneCount || 1 }));
 
       // Debounce autosave to dedicated screenplay content endpoints
       setSaveStatus("saving");
@@ -212,7 +225,12 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
               targetId,
               json,
               screenplayKey,
-              currentRevision
+              currentRevision,
+              {
+                wordCount: words,
+                pageCount: currentPageCount,
+                sceneCount: sceneCount || 1,
+              }
             );
             if (res && res.revision) {
               nextRevision = res.revision;
@@ -221,6 +239,9 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             const res = await screenplaysApi.saveContent(targetId, {
               content: html,
               revision: currentRevision,
+              wordCount: words,
+              pageCount: currentPageCount,
+              sceneCount: sceneCount || 1,
             });
             if (res && res.revision) {
               nextRevision = res.revision;
@@ -230,14 +251,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           setCurrentRevision(nextRevision);
           setSaveStatus("saved");
           setLastSaved(new Date());
-
-          // Non-blocking project metadata sync
-          updateProjectMutation.mutate({
-            id: project.id,
-            data: {
-              lastEditedScene: dynamicScenes[0]?.slugline || "INT. OPENING SCENE - DAY",
-            },
-          });
         } catch (err) {
           console.error("Autosave failed:", err);
           setSaveStatus("saved");
@@ -520,6 +533,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         open={exportModalOpen}
         onOpenChange={setExportModalOpen}
         project={project}
+        stats={stats}
         contentHtml={editor?.getHTML() || ""}
       />
 

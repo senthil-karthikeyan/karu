@@ -1,12 +1,6 @@
 import { apiClient } from "./client";
 import type { SceneItem } from "./scenes";
 
-export interface ProjectStats {
-  pageCount: number;
-  wordCount: number;
-  sceneCount: number;
-}
-
 export interface ProjectResponse {
   id: string;
   userId: string;
@@ -17,8 +11,6 @@ export interface ProjectResponse {
   status: string;
   synopsis: string;
   coverImage: string;
-  lastEditedScene: string;
-  stats: ProjectStats;
   createdAt: string;
   updatedAt: string;
 }
@@ -45,7 +37,6 @@ export interface UpdateProjectRequest {
   status?: string;
   synopsis?: string;
   coverImage?: string;
-  lastEditedScene?: string;
 }
 
 export const projectsApi = {

@@ -29,11 +29,6 @@ interface ProjectStore {
   deleteProject: (id: string) => void;
   archiveProject: (id: string) => void;
 
-  updateProjectStats: (
-    id: string,
-    stats?: { pageCount?: number; wordCount?: number; sceneCount?: number }
-  ) => void;
-
   addActivity: (activity: Omit<ActivityItem, "id" | "timestamp">) => void;
   setHasHydrated: (hydrated: boolean) => void;
 }
@@ -77,12 +72,6 @@ export const useProjectStore = create<ProjectStore>()(
             "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=800&q=80",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          lastEditedScene: "INT. OPENING SCENE - DAY",
-          stats: {
-            pageCount: 1,
-            wordCount: 0,
-            sceneCount: 1,
-          },
           scenes: [
             {
               id: `sc-${Date.now()}`,
@@ -165,24 +154,6 @@ export const useProjectStore = create<ProjectStore>()(
           title: "Project archive status updated",
           description: "Project visibility and status adjusted.",
         });
-      },
-
-      updateProjectStats: (id, stats) => {
-        set((state) => ({
-          projects: state.projects.map((p) =>
-            p.id === id
-              ? {
-                  ...p,
-                  updatedAt: new Date().toISOString(),
-                  stats: {
-                    pageCount: stats?.pageCount ?? p.stats.pageCount,
-                    wordCount: stats?.wordCount ?? p.stats.wordCount,
-                    sceneCount: stats?.sceneCount ?? p.stats.sceneCount,
-                  },
-                }
-              : p
-          ),
-        }));
       },
 
       addActivity: (activity) => {

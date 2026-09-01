@@ -57,12 +57,6 @@ export const INITIAL_PROJECTS: Project[] = [
     coverImage: "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80",
     createdAt: "2026-08-10T09:00:00.000Z",
     updatedAt: "2026-08-17T22:30:00.000Z",
-    lastEditedScene: "INT. TRAIN COMPARTMENT - NIGHT",
-    stats: {
-      pageCount: 112,
-      wordCount: 2646,
-      sceneCount: 24,
-    },
   },
   {
     id: "echoes-of-tomorrow",
@@ -75,12 +69,6 @@ export const INITIAL_PROJECTS: Project[] = [
     coverImage: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=800&q=80",
     createdAt: "2026-08-01T14:15:00.000Z",
     updatedAt: "2026-08-16T18:45:00.000Z",
-    lastEditedScene: "INT. OBSERVATORY DOME - NIGHT",
-    stats: {
-      pageCount: 88,
-      wordCount: 1950,
-      sceneCount: 18,
-    },
   },
   {
     id: "the-last-letter",
@@ -93,12 +81,6 @@ export const INITIAL_PROJECTS: Project[] = [
     coverImage: "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=800&q=80",
     createdAt: "2026-07-20T11:00:00.000Z",
     updatedAt: "2026-08-14T16:10:00.000Z",
-    lastEditedScene: "EXT. SEINE RIVERBANK - DUSK",
-    stats: {
-      pageCount: 32,
-      wordCount: 840,
-      sceneCount: 9,
-    },
   },
 ];
 
