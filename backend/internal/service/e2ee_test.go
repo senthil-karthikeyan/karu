@@ -664,7 +664,6 @@ func TestLegacyProjectScreenplayAndKeyCompatibility(t *testing.T) {
 			ID:                pgtype.UUID{Bytes: projectID, Valid: true},
 			UserID:            pgtype.UUID{Bytes: ownerID, Valid: true},
 			Title:             "Legacy Compatible Project",
-			ScreenplayContent: "old-stale-content",
 			CreatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
 			UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		},

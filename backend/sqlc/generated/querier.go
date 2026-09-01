@@ -15,7 +15,6 @@ type Querier interface {
 	CreateAuthIdentity(ctx context.Context, arg CreateAuthIdentityParams) (AuthIdentity, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
-	CreateScene(ctx context.Context, arg CreateSceneParams) (Scene, error)
 	CreateScreenplay(ctx context.Context, arg CreateScreenplayParams) (CreateScreenplayRow, error)
 	CreateScreenplayContent(ctx context.Context, arg CreateScreenplayContentParams) (CreateScreenplayContentRow, error)
 	CreateScreenplayKey(ctx context.Context, arg CreateScreenplayKeyParams) (ScreenplayKey, error)
@@ -23,8 +22,6 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error)
 	CreateUserEncryptionMetadata(ctx context.Context, arg CreateUserEncryptionMetadataParams) (UserEncryptionMetadatum, error)
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
-	DeleteScene(ctx context.Context, id pgtype.UUID) error
-	DeleteScenesByProjectID(ctx context.Context, projectID pgtype.UUID) error
 	DeleteScreenplay(ctx context.Context, id pgtype.UUID) error
 	DeleteScreenplayKey(ctx context.Context, arg DeleteScreenplayKeyParams) error
 	ForceSetScreenplayContent(ctx context.Context, arg ForceSetScreenplayContentParams) (ForceSetScreenplayContentRow, error)
@@ -35,7 +32,6 @@ type Querier interface {
 	GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, error)
 	GetProjectByIDAndUserID(ctx context.Context, arg GetProjectByIDAndUserIDParams) (Project, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
-	GetSceneByID(ctx context.Context, id pgtype.UUID) (Scene, error)
 	GetScreenplayByID(ctx context.Context, id pgtype.UUID) (GetScreenplayByIDRow, error)
 	GetScreenplayByIDAndUserID(ctx context.Context, arg GetScreenplayByIDAndUserIDParams) (GetScreenplayByIDAndUserIDRow, error)
 	GetScreenplayContent(ctx context.Context, screenplayID pgtype.UUID) (GetScreenplayContentRow, error)
@@ -48,7 +44,6 @@ type Querier interface {
 	GetUserPublicKey(ctx context.Context, userID pgtype.UUID) (GetUserPublicKeyRow, error)
 	ListActivitiesByProjectID(ctx context.Context, projectID pgtype.UUID) ([]Activity, error)
 	ListProjectsByUserID(ctx context.Context, userID pgtype.UUID) ([]Project, error)
-	ListScenesByProjectID(ctx context.Context, projectID pgtype.UUID) ([]Scene, error)
 	ListScreenplayVersionsByScreenplayID(ctx context.Context, screenplayID pgtype.UUID) ([]ListScreenplayVersionsByScreenplayIDRow, error)
 	ListScreenplaysByProjectID(ctx context.Context, arg ListScreenplaysByProjectIDParams) ([]ListScreenplaysByProjectIDRow, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) error
@@ -56,7 +51,6 @@ type Querier interface {
 	UpdateAuthIdentityPassword(ctx context.Context, arg UpdateAuthIdentityPasswordParams) (AuthIdentity, error)
 	UpdateEncryptedScreenplayContentWithRevision(ctx context.Context, arg UpdateEncryptedScreenplayContentWithRevisionParams) (UpdateEncryptedScreenplayContentWithRevisionRow, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
-	UpdateScene(ctx context.Context, arg UpdateSceneParams) (Scene, error)
 	UpdateScreenplay(ctx context.Context, arg UpdateScreenplayParams) (UpdateScreenplayRow, error)
 	UpdateScreenplayContentWithRevision(ctx context.Context, arg UpdateScreenplayContentWithRevisionParams) (UpdateScreenplayContentWithRevisionRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (UpdateUserPasswordRow, error)

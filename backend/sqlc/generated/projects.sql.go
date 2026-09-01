@@ -28,7 +28,7 @@ INSERT INTO projects (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
-RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 `
 
 type CreateProjectParams struct {
@@ -72,7 +72,6 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.ScreenplayContent,
 		&i.PageCount,
 		&i.WordCount,
 		&i.SceneCount,
@@ -99,7 +98,7 @@ func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) er
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 FROM projects
 WHERE id = $1
 `
@@ -117,7 +116,6 @@ func (q *Queries) GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, 
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.ScreenplayContent,
 		&i.PageCount,
 		&i.WordCount,
 		&i.SceneCount,
@@ -129,7 +127,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id pgtype.UUID) (Project, 
 }
 
 const getProjectByIDAndUserID = `-- name: GetProjectByIDAndUserID :one
-SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 FROM projects
 WHERE id = $1 AND user_id = $2
 `
@@ -152,7 +150,6 @@ func (q *Queries) GetProjectByIDAndUserID(ctx context.Context, arg GetProjectByI
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.ScreenplayContent,
 		&i.PageCount,
 		&i.WordCount,
 		&i.SceneCount,
@@ -164,7 +161,7 @@ func (q *Queries) GetProjectByIDAndUserID(ctx context.Context, arg GetProjectByI
 }
 
 const listProjectsByUserID = `-- name: ListProjectsByUserID :many
-SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+SELECT id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 FROM projects
 WHERE user_id = $1
 ORDER BY updated_at DESC
@@ -189,7 +186,6 @@ func (q *Queries) ListProjectsByUserID(ctx context.Context, userID pgtype.UUID) 
 			&i.Status,
 			&i.Synopsis,
 			&i.CoverImage,
-			&i.ScreenplayContent,
 			&i.PageCount,
 			&i.WordCount,
 			&i.SceneCount,
@@ -220,7 +216,7 @@ SET
     last_edited_scene = COALESCE($10, last_edited_scene),
     updated_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, screenplay_content, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
+RETURNING id, user_id, title, logline, genre, format, status, synopsis, cover_image, page_count, word_count, scene_count, last_edited_scene, created_at, updated_at
 `
 
 type UpdateProjectParams struct {
@@ -260,7 +256,6 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.Status,
 		&i.Synopsis,
 		&i.CoverImage,
-		&i.ScreenplayContent,
 		&i.PageCount,
 		&i.WordCount,
 		&i.SceneCount,
