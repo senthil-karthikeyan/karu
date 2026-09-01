@@ -1,6 +1,6 @@
 # Karu Backend
 
-The backend service for **Karu**, a high-performance screenplay writing and film project development platform. Built with **Go 1.24+**, **Gin HTTP framework**, **PostgreSQL 16**, **pgx/v5**, **sqlc**, **golang-migrate**, and **Zero-Knowledge 3-Tier E2EE Storage**.
+The backend service for **Karu**, a high-performance screenplay writing and film project development platform. Built with **Go 1.24+**, **Gin HTTP framework**, **PostgreSQL 16**, **pgx/v5**, **sqlc**, **golang-migrate**, and **Zero-Knowledge E2EE Storage**.
 
 ---
 
@@ -86,6 +86,7 @@ The backend implements a clean, layered architecture ensuring strict separation 
 backend/
 ├── cmd/
 │   ├── api/main.go            # Application entry point & service bootstrap
+│   ├── migrate/main.go        # Programmatic migration runner
 │   └── server/main.go         # Alternate server entry point
 ├── db/
 │   ├── migrations/            # Versioned SQL migrations (golang-migrate)
@@ -94,18 +95,24 @@ backend/
 │   │   ├── 000003_e2ee_support.up.sql
 │   │   ├── 000004_e2ee_support.up.sql
 │   │   ├── 000005_user_encryption_identities.up.sql
-│   │   └── 000006_project_keys.up.sql
+│   │   ├── 000006_project_keys.up.sql
+│   │   ├── 000007_unified_screenplay_schema.up.sql
+│   │   ├── 000008_migrate_legacy_project_screenplays.up.sql
+│   │   ├── 000009_cleanup_legacy_schema.up.sql
+│   │   ├── 000010_cleanup_legacy_screenplay_schema.up.sql
+│   │   ├── 000011_enforce_screenplay_keys_fk.up.sql
+│   │   └── 000012_move_stats_to_screenplays.up.sql
 │   └── queries/               # sqlc SQL query definitions
 │       ├── activities.sql
 │       ├── auth_identities.sql
-│       ├── project_keys.sql
 │       ├── projects.sql
 │       ├── refresh_tokens.sql
-│       ├── scenes.sql
 │       ├── screenplay_contents.sql
+│       ├── screenplay_keys.sql
 │       ├── screenplay_versions.sql
 │       ├── screenplays.sql
 │       ├── user_encryption_identities.sql
+│       ├── user_encryption_metadata.sql
 │       └── users.sql
 ├── internal/
 │   ├── auth/                  # Password hashing (bcrypt), JWT, and Goth OAuth
@@ -173,11 +180,13 @@ Karu implements a multi-provider authentication system supporting both tradition
 The Go backend operates on a strict **Zero-Knowledge Principle**:
 
 1. **Zero Plaintext Exposure**: Screenplay content, revisions, and checkpoints exist only as AES-256-GCM ciphertext blobs with associated 12-byte IVs and 128-bit authentication tags.
-2. **Zero Key Knowledge**: The backend stores only wrapped keys:
+2. **Screenplay-Level Statistics**: Screenplay statistics (`word_count`, `page_count`, `scene_count`) are calculated locally in the browser from the decrypted TipTap AST and persisted with the encrypted content update.
+3. **Pure Project Metadata**: The `projects` table stores only project-level metadata (`title`, `genre`, `format`, `logline`, `synopsis`, `status`, `cover_image`).
+4. **Zero Key Knowledge**: The backend stores only wrapped keys:
    - `user_encryption_metadata`: Stores salt & PBKDF2 iterations for client-side UEK derivation.
    - `user_encryption_identities`: Stores the user's public ECDH key (SPKI) and wrapped private key (PKCS#8 wrapped with UEK).
    - `screenplay_keys`: Stores the random Screenplay Content Key (`SCK`) directly wrapped with the user's `UEK` (Canonical 2-Tier Hierarchy: Passphrase -> UEK -> SCK -> Content).
-3. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies historical encrypted payloads directly into `screenplay_contents` without server-side decryption.
+5. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies historical encrypted payloads directly into `screenplay_contents` without server-side decryption.
 
 ---
 
@@ -217,6 +226,7 @@ r.Use(middleware.CORS(deps.Config.CORS))
 9. `000009_cleanup_legacy_schema`: Adds covering indexes for revision and key queries.
 10. `000010_cleanup_legacy_screenplay_schema`: Drops deprecated `projects.screenplay_content`, `project_keys`, and `scenes` tables.
 11. `000011_enforce_screenplay_keys_fk`: Enforces `FOREIGN KEY (screenplay_id) REFERENCES screenplays(id) ON DELETE CASCADE` on `screenplay_keys`.
+12. `000012_move_stats_to_screenplays`: Moves screenplay statistics (`word_count`, `page_count`, `scene_count`) from `projects` to `screenplays` and removes `last_edited_scene`.
 
 ---
 
@@ -253,36 +263,31 @@ r.Use(middleware.CORS(deps.Config.CORS))
 | `POST` | `/api/v1/users/me/encryption-identity` | **Yes** | Store or update user's ECDH P-256 identity keypair |
 | `GET` | `/api/v1/users/:id/public-key` | **Yes** | Retrieve public key (SPKI) for another user by ID |
 
-### Projects & Project Keys
+### Projects
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/projects` | **Yes** | List all projects belonging to the user |
 | `POST` | `/api/v1/projects` | **Yes** | Create a new project |
-| `GET` | `/api/v1/projects/:id` | **Yes** | Get project details including scene list |
+| `GET` | `/api/v1/projects/:id` | **Yes** | Get project details (pure metadata) |
 | `PATCH` | `/api/v1/projects/:id` | **Yes** | Update project metadata or status |
-| `DELETE` | `/api/v1/projects/:id` | **Yes** | Delete project and cascade all related data |
-| `GET` | `/api/v1/projects/:id/key` | **Yes** | Retrieve wrapped Project Encryption Key (`PEK`) |
-| `POST` | `/api/v1/projects/:id/key` | **Yes** | Store or update wrapped Project Encryption Key (`PEK`) |
-| `GET` | `/api/v1/projects/:id/scenes` | **Yes** | List scenes for a project in order |
-| `POST` | `/api/v1/projects/:id/scenes` | **Yes** | Create a new scene |
-| `PATCH` | `/api/v1/projects/:id/scenes/:sceneId` | **Yes** | Update scene slugline, location, or summary |
-| `DELETE` | `/api/v1/projects/:id/scenes/:sceneId` | **Yes** | Delete a scene |
+| `DELETE` | `/api/v1/projects/:id` | **Yes** | Delete project and cascade all related screenplays |
+| `GET` | `/api/v1/projects/:id/screenplay` | **Yes** | Get default canonical screenplay for project |
 | `GET` | `/api/v1/projects/:id/activities` | **Yes** | List project activity history audit log |
 
 ### Screenplays, Content, Keys & Versions
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/projects/:id/screenplays` | **Yes** | List all screenplays within a project |
-| `POST` | `/api/v1/projects/:id/screenplays` | **Yes** | Create a screenplay with initial revision |
-| `GET` | `/api/v1/screenplays/:id` | **Yes** | Get screenplay details and current content |
-| `PATCH` | `/api/v1/screenplays/:id` | **Yes** | Update screenplay title or description |
-| `DELETE` | `/api/v1/screenplays/:id` | **Yes** | Delete screenplay |
+| `GET` | `/api/v1/projects/:id/screenplays` | **Yes** | List all screenplays within a project with statistics |
+| `POST` | `/api/v1/projects/:id/screenplays` | **Yes** | Create a screenplay with initial revision and statistics |
+| `GET` | `/api/v1/screenplays/:id` | **Yes** | Get screenplay details, statistics, and current content |
+| `PATCH` | `/api/v1/screenplays/:id` | **Yes** | Update screenplay title, description, or statistics |
+| `DELETE` | `/api/v1/screenplays/:id` | **Yes** | Delete screenplay and cascade keys, content, and versions |
 | `GET` | `/api/v1/screenplays/:id/key` | **Yes** | Retrieve authenticated user's wrapped SCK |
 | `POST` | `/api/v1/screenplays/:id/key` | **Yes** | Store or update wrapped SCK |
 | `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current content (ciphertext or plaintext) and revision |
-| `PUT` | `/api/v1/screenplays/:id/content` | **Yes** | Autosave content with OCC (returns 409 on revision conflict) |
+| `PUT` | `/api/v1/screenplays/:id/content` | **Yes** | Autosave content & update statistics with OCC (409 on revision conflict) |
 | `GET` | `/api/v1/screenplays/:id/versions` | **Yes** | List historical version checkpoints |
 | `POST` | `/api/v1/screenplays/:id/versions` | **Yes** | Create a named version checkpoint (stores ciphertext snapshot) |
 | `GET` | `/api/v1/screenplays/:id/versions/:versionId` | **Yes** | Retrieve a specific historical version snapshot |

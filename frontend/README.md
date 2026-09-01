@@ -46,7 +46,7 @@ The frontend follows Next.js App Router patterns, utilizing Server Components fo
                                 ┌─────────────────────────────┐
                                 │      E2EE Crypto Engine     │
                                 │   Web Crypto (SubtleCrypto) │
-                                │  UEK • PEK • SCK • ECDH P256 │
+                                │  UEK • SCK • ECDH P256      │
                                 └──────────────┬──────────────┘
                                                │
                                                ▼
@@ -54,6 +54,7 @@ The frontend follows Next.js App Router patterns, utilizing Server Components fo
                                 │       State & Data Layer    │
                                 │ TanStack Query (Server)     │
                                 │ Zustand Stores (In-Memory)  │
+                                │ Local Statistics Engine     │
                                 └──────────────┬──────────────┘
                                                │
                                                ▼
@@ -73,7 +74,7 @@ frontend/
 ├── public/                    # Static image assets and icons
 ├── scripts/
 │   ├── e2e-browser-test.mjs   # Full 21-test Playwright browser automation suite
-│   └── run-crypto-tests.mjs   # 12-test Web Crypto unit test runner
+│   └── run-crypto-tests.mjs   # 17-test Web Crypto unit test runner
 ├── src/
 │   ├── app/                   # Next.js App Router pages
 │   │   ├── (auth)/            # Authentication group routes
@@ -99,22 +100,21 @@ frontend/
 │   │   ├── dashboard/         # Project cards, metrics, filters
 │   │   ├── editor/            # Screenplay editor, toolbar, scene nav, export
 │   │   ├── landing/           # Hero, feature showcase, footer
-│   │   ├── modals/            # Create project modal with automatic PEK wrapping
+│   │   ├── modals/            # Create project modal
 │   │   ├── navigation/        # Main navigation header & workspace sidebar
 │   │   ├── preview/           # Multi-page preview canvas & pagination strip
 │   │   ├── ui/                # Base UI / shadcn design system primitives
 │   │   └── workspace/         # Overview, activity log & project settings
 │   ├── hooks/                 # React Query & auth hooks
 │   │   ├── use-auth.ts        # Session verification and guard hook
-│   │   ├── use-projects.ts    # React Query hooks for projects, scenes, activities
+│   │   ├── use-projects.ts    # React Query hooks for projects, screenplays, activities
 │   │   └── use-user.ts        # React Query hooks for user profile & settings
 │   ├── lib/                   # Utility libraries & API client
 │   │   ├── api/               # Typed API client modules
 │   │   │   ├── client.ts      # Core fetch wrapper with 401 token refresh queue
 │   │   │   ├── auth.ts        # Authentication & encryption identity endpoints
-│   │   │   ├── projects.ts    # Project CRUD & project key endpoints
-│   │   │   ├── screenplays.ts # Screenplay content, revisions, versions & keys
-│   │   │   ├── scenes.ts      # Scene management endpoints
+│   │   │   ├── projects.ts    # Project CRUD endpoints (pure project metadata)
+│   │   │   ├── screenplays.ts # Screenplay content, revisions, versions, statistics & keys
 │   │   │   └── activities.ts  # Activity history endpoints
 │   │   ├── crypto/            # Client-Side Cryptographic Engine (E2EE)
 │   │   │   ├── aes-gcm.ts     # AES-256-GCM encryption & decryption
@@ -122,7 +122,7 @@ frontend/
 │   │   │   ├── encoding.ts    # Lossless UTF-8 & Base64 conversions
 │   │   │   ├── index.ts       # Barrel export
 │   │   │   ├── key-derivation.ts # PBKDF2-SHA256 (600,000 rounds)
-│   │   │   ├── key-manager.ts # 3-tier key wrapping & ECDH P-256 identity
+│   │   │   ├── key-manager.ts # 2-tier key wrapping & ECDH P-256 identity
 │   │   │   ├── recovery.ts    # Emergency recovery key generator & kit
 │   │   │   └── screenplay-encryption.ts # TipTap JSON AST encryption & parsing
 │   │   ├── date.ts            # Relative time formatting
@@ -133,12 +133,12 @@ frontend/
 │   ├── providers/             # React Query & Theme providers
 │   ├── stores/                # Zustand client state stores
 │   │   ├── auth-store.ts      # Authentication session state
-│   │   ├── encryption-store.ts # In-memory 3-tier cryptographic key state
+│   │   ├── encryption-store.ts # In-memory cryptographic key state
 │   │   ├── project-store.ts   # Project activity and local project state
 │   │   ├── app-store.ts       # Global UI toggles
 │   │   └── user-store.ts      # Local profile state
 │   └── types/                 # TypeScript interfaces and domain types
-│       └── screenplay.ts      # Screenplay, Scene, Project & Export types
+│       └── screenplay.ts      # Screenplay, Project & Export types
 ├── package.json               # Package dependencies & scripts
 └── tsconfig.json              # TypeScript compiler configuration
 ```
@@ -147,36 +147,24 @@ frontend/
 
 ## 🔐 Zero-Knowledge Cryptographic Engine (`src/lib/crypto`)
 
-### 1. 3-Tier Key Hierarchy
+### 1. Key Hierarchy
 
-Karu implements a 3-tier key architecture ensuring document keys and project scopes are decoupled:
+Karu implements a 2-tier direct key architecture:
 
 1. **Tier 1 — User Encryption Key (`UEK`)**:
    - Derived client-side via `PBKDF2-SHA256` using the user's secret passphrase, 32-byte CSPRNG salt, and **600,000 iterations**.
    - Held strictly in non-persistent JavaScript memory (Zustand). Never stored in `localStorage`, `sessionStorage`, or cookies.
-2. **Tier 2 — User Identity (`ECDH P-256`) & Project Encryption Key (`PEK`)**:
-   - `User Identity`: ECDH P-256 keypair. Public key is uploaded in SPKI format; private key is wrapped with `UEK` via AES-256-GCM before saving to backend.
-   - `PEK`: Unique 256-bit AES-GCM key per project, wrapped with `UEK` and stored in the database.
-3. **Tier 3 — Screenplay Content Key (`SCK`) & Document Encryption**:
-   - `SCK`: Unique 256-bit AES-GCM key generated per screenplay and wrapped with the project's `PEK`.
+2. **Tier 2 — Screenplay Content Key (`SCK`) & Document Encryption**:
+   - `SCK`: Unique 256-bit AES-GCM key generated per screenplay and directly wrapped with the user's `UEK`.
    - `Document Payload`: Serialized TipTap JSON encrypted with `SCK` using a fresh 12-byte random IV.
 
-### 2. Emergency Recovery Kit (`src/lib/crypto/recovery.ts`)
+### 2. Client-Side Statistics Calculation
 
-- Generates 128-bit entropy Base32 checksummed keys formatted as `KARU-XXXX-XXXX-XXXX-...`.
-- Provides an automated one-click downloadable text file (`KARU-Emergency-Recovery-Kit.txt`) with safety warnings and recovery instructions.
-
-### 3. Screenplay Encryption & Autosave (`src/lib/crypto/screenplay-encryption.ts`)
-
-- Parses TipTap ProseMirror document AST into JSON.
-- Encrypts AST via AES-256-GCM.
-- Returns `{ version: 1, algorithm: "AES-GCM", iv: "...", ciphertext: "..." }`.
-- Plaintext screenplay content never touches network transmission or persistent disk.
-
-### 4. Legacy Plaintext Migration (`src/components/crypto/legacy-migration-card.tsx`)
-
-- Automatically detects unencrypted legacy workspaces in user accounts.
-- In-place batch migration converts HTML/plain text into TipTap AST, generates `PEK`/`SCK` wrappers, encrypts documents client-side, and updates backend records seamlessly.
+Because the backend holds zero knowledge of the plaintext screenplay content, statistics calculation is performed entirely client-side:
+- **Word Count**: Computed from active TipTap document text.
+- **Page Count**: Real-time physical page measurement from `ScreenplayPagination` ProseMirror plugin (840px usable page height threshold).
+- **Scene Count**: Computed by traversing the TipTap AST (`sceneHeading` nodes).
+- Statistics are passed alongside the encrypted document payload during autosave (`PUT /screenplays/:id/content`) and stored at the screenplay level (`screenplays.word_count`, `screenplays.page_count`, `screenplays.scene_count`).
 
 ---
 
@@ -237,7 +225,7 @@ The application will be running at [http://localhost:3000](http://localhost:3000
 
 ## 🧪 Verification & Testing
 
-### 1. Run Cryptographic Unit Tests (12 Suites)
+### 1. Run Cryptographic Unit Tests (17 Suites)
 
 ```bash
 pnpm test:crypto
