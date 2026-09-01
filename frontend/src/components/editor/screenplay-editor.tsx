@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import Link from "next/link";
@@ -159,6 +159,11 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       StarterKit.configure({
         paragraph: false,
         heading: false,
+        listItem: false,
+        bulletList: false,
+        orderedList: false,
+        blockquote: false,
+        codeBlock: false,
       }),
       ...ScreenplayNodes,
       ScreenplayAutoFormatting,
@@ -427,7 +432,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
               </span>
             )}
             <span className="text-[11px] text-muted-foreground hidden lg:inline">
-              • {formatRelativeTime(lastSaved.toISOString())}
+              • {formatRelativeTime(lastSaved)}
             </span>
           </div>
 
