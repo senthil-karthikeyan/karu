@@ -1,4 +1,4 @@
-export interface ApiResponse<T = unknown> {
+﻿export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: {
@@ -25,30 +25,50 @@ const API_BASE_URL =
 const TOKEN_KEY = "karu_access_token";
 const REFRESH_TOKEN_KEY = "karu_refresh_token";
 
+/**
+ * Helper to retrieve a cookie value by name.
+ */
+export function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Helper to set a cookie with max-age and security flags.
+ */
+export function setCookie(name: string, value: string, maxAgeSeconds: number = 604800) {
+  if (typeof document === "undefined") return;
+  const isSecure = typeof location !== "undefined" && location.protocol === "https:";
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax${isSecure ? "; Secure" : ""}`;
+}
+
+/**
+ * Helper to remove a cookie.
+ */
+export function removeCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+}
+
 export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return getCookie(TOKEN_KEY);
 }
 
 export function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  return getCookie(REFRESH_TOKEN_KEY);
 }
 
 export function setTokens(accessToken: string, refreshToken?: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TOKEN_KEY, accessToken);
-  document.cookie = `${TOKEN_KEY}=${encodeURIComponent(accessToken)}; path=/; max-age=604800; SameSite=Lax`;
+  setCookie(TOKEN_KEY, accessToken, 604800); // 7 days
   if (refreshToken) {
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+    setCookie(REFRESH_TOKEN_KEY, refreshToken, 604800 * 4); // 28 days
   }
 }
 
 export function clearTokens() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`;
+  removeCookie(TOKEN_KEY);
+  removeCookie(REFRESH_TOKEN_KEY);
 }
 
 let isRefreshing = false;
