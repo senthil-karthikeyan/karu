@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import {
   CloudUpload,
   Download,
   History,
+  Share2,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -26,6 +27,8 @@ import {
 } from "@/lib/crypto";
 import { EncryptionBadge } from "@/components/crypto/encryption-badge";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
+import { ShareScreenplayModal } from "@/components/crypto/share-screenplay-modal";
+
 import { ScreenplayToolbar } from "./screenplay-toolbar";
 import { SceneNavigator } from "./scene-navigator";
 import { ExportModal } from "./export-modal";
@@ -103,7 +106,9 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const [lastSaved, setLastSaved] = useState<Date>(new Date(project.updatedAt));
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
+
   const [currentHtml, setCurrentHtml] = useState<string>("");
   const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes?.[0]?.id);
 
@@ -224,34 +229,27 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           const targetId = activeScreenplayId || project.id;
           let nextRevision = currentRevision;
 
-          if (screenplayKey) {
-            const json = currentEditor.getJSON() as TipTapDocumentJSON;
-            const res = await screenplaysApi.saveEncryptedContent(
-              targetId,
-              json,
-              screenplayKey,
-              currentRevision,
-              {
-                wordCount: words,
-                pageCount: currentPageCount,
-                sceneCount: sceneCount || 1,
-              }
-            );
-            if (res && res.revision) {
-              nextRevision = res.revision;
-            }
-          } else {
-            const res = await screenplaysApi.saveContent(targetId, {
-              content: html,
-              revision: currentRevision,
+          if (!screenplayKey) {
+            console.warn("Autosave skipped: screenplay encryption key not loaded.");
+            return;
+          }
+
+          const json = currentEditor.getJSON() as TipTapDocumentJSON;
+          const res = await screenplaysApi.saveEncryptedContent(
+            targetId,
+            json,
+            screenplayKey,
+            currentRevision,
+            {
               wordCount: words,
               pageCount: currentPageCount,
               sceneCount: sceneCount || 1,
-            });
-            if (res && res.revision) {
-              nextRevision = res.revision;
             }
+          );
+          if (res && res.revision) {
+            nextRevision = res.revision;
           }
+
 
           setCurrentRevision(nextRevision);
           setSaveStatus("saved");
@@ -466,6 +464,17 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setShareModalOpen(true)}
+              className="gap-1.5 text-xs font-medium h-8"
+              title="Share Screenplay & Collaborators"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Share</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setExportModalOpen(true)}
               className="gap-1.5 text-xs font-medium h-8"
             >
@@ -554,6 +563,15 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           setLastSaved(new Date());
         }}
       />
+
+      {/* Share Screenplay & Collaborators Modal */}
+      <ShareScreenplayModal
+        open={shareModalOpen}
+        onOpenChange={setShareModalOpen}
+        screenplayId={activeScreenplayId || project.id}
+        screenplayTitle={screenplay?.title || project.title}
+      />
+
 
       {/* E2EE Setup / Unlock Modal */}
       <EncryptionDialog

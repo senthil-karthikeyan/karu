@@ -1,15 +1,37 @@
 /**
- * Emergency Recovery Kit generator and helpers for Karu E2EE.
+ * Emergency Recovery Kit and Key Wrapping routines for Karu E2EE.
+ *
+ * In the target E2EE architecture:
+ * - A random Emergency Recovery Code (e.g. KARU-XXXX-XXXX-XXXX-XXXX-XXXX) is generated client-side.
+ * - An independent recovery salt is generated.
+ * - PBKDF2(recovery_code, recovery_salt, 600k, SHA-256) derives a 256-bit Recovery Wrapping Key (AES-GCM).
+ * - The user's ECDH P-256 private key (PKCS#8) is wrapped under the Recovery Wrapping Key.
+ * - The raw recovery code is NEVER sent to the backend.
+ * - Forgotten password recovery flow unwraps the private key with the recovery code, then
+ *   re-wraps it with a new password-derived UEK.
  */
 
-import { generateRandomBytes } from "./encoding";
+import {
+  DEFAULT_PBKDF2_ITERATIONS,
+  AES_KEY_LENGTH,
+  SALT_LENGTH_BYTES,
+  GCM_IV_LENGTH_BYTES,
+  type KeyDerivationOptions,
+} from "./crypto-types";
+import {
+  getSubtleCrypto,
+  generateRandomBytes,
+  stringToUtf8Bytes,
+  uint8ArrayToBase64,
+  base64ToUint8Array,
+} from "./encoding";
 
 /**
  * Generates a cryptographically random Emergency Recovery Code formatted with chunked blocks.
  * Example: KARU-7F3A-8C2D-E91B-4402-9B7C
  */
 export function generateEmergencyRecoveryKey(): string {
-  const bytes = generateRandomBytes(15);
+  const bytes = generateRandomBytes(16);
   const hex = Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
     .join("");
@@ -20,6 +42,131 @@ export function generateEmergencyRecoveryKey(): string {
   }
 
   return `KARU-${chunks.join("-")}`;
+}
+
+/**
+ * Normalizes a recovery code input by stripping extra spaces, making uppercase.
+ */
+export function normalizeRecoveryKey(rawKey: string): string {
+  return rawKey.trim().toUpperCase();
+}
+
+/**
+ * Derives a 256-bit AES-GCM Recovery Wrapping Key from the recovery code and recovery salt using PBKDF2.
+ */
+export async function deriveRecoveryWrappingKey(
+  recoveryCode: string,
+  salt: Uint8Array | string,
+  options?: KeyDerivationOptions
+): Promise<CryptoKey> {
+  const normalized = normalizeRecoveryKey(recoveryCode);
+  if (!normalized) {
+    throw new Error("Emergency Recovery Code is required.");
+  }
+
+  const subtle = getSubtleCrypto();
+  const rawSalt = typeof salt === "string" ? base64ToUint8Array(salt) : salt;
+
+  if (!rawSalt || rawSalt.byteLength < 8) {
+    throw new Error("Invalid recovery salt: salt must be at least 8 bytes.");
+  }
+
+  const iterations = options?.iterations ?? DEFAULT_PBKDF2_ITERATIONS;
+  const hash = options?.hash ?? "SHA-256";
+  const length = options?.length ?? AES_KEY_LENGTH;
+
+  // Import normalized code as PBKDF2 secret
+  const secretBytes = stringToUtf8Bytes(normalized);
+  const baseKey = await subtle.importKey(
+    "raw",
+    secretBytes as unknown as BufferSource,
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+
+  return subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: rawSalt as unknown as BufferSource,
+      iterations,
+      hash,
+    },
+    baseKey,
+    {
+      name: "AES-GCM",
+      length,
+    },
+    false,
+    ["encrypt", "decrypt", "wrapKey", "unwrapKey"]
+  );
+}
+
+/**
+ * Wraps a user's ECDH P-256 private key (PKCS#8) under their derived Recovery Wrapping Key.
+ */
+export async function wrapPrivateKeyWithRecoveryKey(
+  privateKey: CryptoKey,
+  recoveryWrappingKey: CryptoKey
+): Promise<{ wrappedPrivateKey: string; recoveryKeyIv: string }> {
+  const subtle = getSubtleCrypto();
+  const iv = generateRandomBytes(GCM_IV_LENGTH_BYTES);
+
+  try {
+    const wrappedBuffer = await subtle.wrapKey(
+      "pkcs8",
+      privateKey,
+      recoveryWrappingKey,
+      {
+        name: "AES-GCM",
+        iv: iv as BufferSource,
+      }
+    );
+
+    return {
+      wrappedPrivateKey: uint8ArrayToBase64(new Uint8Array(wrappedBuffer)),
+      recoveryKeyIv: uint8ArrayToBase64(iv),
+    };
+  } catch (error) {
+    throw new Error(
+      `Failed to wrap private key with recovery key: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+/**
+ * Unwraps a user's ECDH P-256 private key using their derived Recovery Wrapping Key.
+ */
+export async function unwrapPrivateKeyWithRecoveryKey(
+  wrappedPrivateKeyBase64: string,
+  ivBase64: string,
+  recoveryWrappingKey: CryptoKey
+): Promise<CryptoKey> {
+  const subtle = getSubtleCrypto();
+  const iv = base64ToUint8Array(ivBase64);
+  const wrappedBytes = base64ToUint8Array(wrappedPrivateKeyBase64);
+
+  try {
+    return await subtle.unwrapKey(
+      "pkcs8",
+      wrappedBytes as BufferSource,
+      recoveryWrappingKey,
+      {
+        name: "AES-GCM",
+        iv: iv as BufferSource,
+      },
+      {
+        name: "ECDH",
+        namedCurve: "P-256",
+      },
+      true,
+      ["deriveKey", "deriveBits"]
+    );
+  } catch (error) {
+    throw new Error(
+      `Failed to unwrap private key with recovery key: ${error instanceof Error ? error.message : "Invalid recovery code"}`
+    );
+  }
 }
 
 /**
@@ -53,8 +200,8 @@ IMPORTANT SECURITY INSTRUCTIONS:
    Karu employees and servers DO NOT hold your master secret or encryption keys.
 
 2. If you forget your master encryption passphrase, this Emergency Recovery Code
-   is your ONLY method to verify your cryptographic identity and regain access
-   to your encrypted screenplay drafts.
+   is your ONLY method to regain access to your private encryption identity and
+   your encrypted screenplay drafts.
 
 3. Store this file securely:
    - Print a physical copy and keep it in a safe place.

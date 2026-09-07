@@ -9,3 +9,5 @@ export * from "./aes-gcm";
 export * from "./key-manager";
 export * from "./screenplay-encryption";
 export * from "./recovery";
+export * from "./ecies";
+

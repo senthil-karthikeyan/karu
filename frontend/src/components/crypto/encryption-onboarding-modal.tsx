@@ -98,10 +98,11 @@ export function EncryptionOnboardingModal({
     setStep(3);
 
     try {
-      await setupNewSecret(secret);
+      await setupNewSecret(secret, recoveryKey);
       toast.success("Zero-Knowledge Encryption Activated!", {
         description: "Your screenplay content is now protected with client-side AES-GCM (256-bit).",
       });
+
 
       if (onSuccess) {
         await onSuccess();
