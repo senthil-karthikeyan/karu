@@ -9,8 +9,8 @@
 Karu is designed to streamline the filmmaking and screenwriting workflow from initial concept to production draft with military-grade privacy. Traditional screenwriting software is often cluttered, legacy-bound, or tied to proprietary desktop formats with unencrypted cloud storage. Karu delivers:
 
 * **Zero-Knowledge End-to-End Encryption (E2EE)**: Client-side AES-256-GCM encryption ensures screenplay drafts, character bios, dialogue, and revision history are encrypted before leaving your browser. The database and backend hold zero knowledge of your creative work.
-* **Canonical Key Hierarchy**: Master User Encryption Key (`UEK`) $\rightarrow$ Document Screenplay Content Key (`SCK`) with ECDH P-256 asymmetric identity for secure key distribution.
-* **Emergency Recovery Kit**: Base32 checksummed emergency recovery keys (`KARU-XXXX-XXXX-...`) with downloadable recovery kits preventing data lock-out.
+* **Canonical Key Hierarchy**: Master User Encryption Key (`UEK`) $\rightarrow$ Document Screenplay Content Key (`SCK`) with ECDH P-256 asymmetric identity for secure key distribution and ECIES-based screenplay sharing.
+* **Emergency Recovery Kit**: Base32 checksummed emergency recovery keys (`KARU-XXXX-XXXX-...`) with client-side PBKDF2 derivation and double-wrapped private keys preventing data lock-out.
 * **Cinematic Project Workspace**: Manage film projects with pure metadata including title, loglines, genre, format, and synopsis.
 * **Screenplay-Level Statistics**: Screenplay statistics (`word_count`, `page_count`, `scene_count`) are computed client-side from the decrypted TipTap AST and stored with each screenplay.
 * **Physical Page Pagination**: Write on an industry-standard 8.5" × 11" screenplay canvas with real-time block-height pagination that flows text across page boundaries with header page numbering.
@@ -28,8 +28,8 @@ Karu is fully implemented, hardened, and operational:
 
 * **Frontend**: Built with **Next.js 16 (Turbopack)**, **React 19**, **Tailwind CSS v4**, **shadcn/ui**, **TipTap (ProseMirror)**, and **Web Crypto API (SubtleCrypto)**.
 * **Backend**: High-performance REST API built in **Go 1.24+** using **Gin**, **pgx/v5**, **sqlc**, **golang-migrate**, **golang-jwt/v5**, and security middleware.
-* **Database**: **PostgreSQL 16** managed through versioned SQL migrations (`000001` through `000012_move_stats_to_screenplays`).
-* **Security & E2EE**: 100% Zero-Knowledge key hierarchy verified via 17 cryptographic unit tests and automated Playwright browser tests.
+* **Database**: **PostgreSQL 16** managed through versioned SQL migrations (`000001` through `000013_e2ee_schema_revamp`).
+* **Security & E2EE**: 100% Zero-Knowledge key hierarchy verified via cryptographic unit tests and automated Playwright browser tests.
 
 ---
 
@@ -62,8 +62,10 @@ Karu is fully implemented, hardened, and operational:
 │                    PostgreSQL 16 Engine                     │
 │    projects (pure metadata: title, genre, format, etc.)     │
 │    screenplays (stats: word_count, page_count, scene_count) │
+│    user_encryption_keys (salt, iterations, identity keys)   │
+│    user_recovery_credentials (PBKDF2 recovery key wrap)     │
+│    screenplay_access_keys (ECIES-wrapped SCK + RBAC roles)  │
 │    screenplay_contents (opaque AES-256-GCM TipTap AST)      │
-│    screenplay_keys (wrapped SCK)                            │
 │    screenplay_versions (encrypted snapshots)               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -73,25 +75,31 @@ Karu is fully implemented, hardened, and operational:
 ## Cryptographic Key Hierarchy
 
 ```text
-               +----------------------------------+
-               |        Master Passphrase         |
-               +----------------------------------+
-                                |
-                                | PBKDF2-SHA256 (600,000 iterations)
-                                v
-               +----------------------------------+
-               |   User Encryption Key (UEK)      |  (Tier 1: Master Key in Memory)
-               +----------------------------------+
-                     /                      \
-      AES-256-GCM   /                        \  AES-256-GCM
-                   v                          v
+               +----------------------------------+        +-----------------------------------+
+               |        Master Passphrase         |        |      Emergency Recovery Code      |
+               +----------------------------------+        +-----------------------------------+
+                                |                                            |
+                                | PBKDF2-SHA256 (600,000 iter)               | PBKDF2-SHA256 (600,000 iter)
+                                v                                            v
+               +----------------------------------+        +-----------------------------------+
+               |   User Encryption Key (UEK)      |        |     Recovery Wrapping Key         |
+               +----------------------------------+        +-----------------------------------+
+                     /                      \                                |
+      AES-256-GCM   /                        \  AES-256-GCM                  | AES-256-GCM
+                   v                          v                              v
+    +---------------------------+     +-----------------------------+ <------+
+    | User Identity Keypair     |     | Screenplay Content Key (SCK)|
+    | (ECDH P-256 Private Key)  |     | (Random 256-bit AES-GCM Key)|
     +---------------------------+     +-----------------------------+
-    | User Identity Keypair     |     | Screenplay Content Key (SCK)|  (Tier 2: Document Key)
-    | (ECDH P-256 Private Key)  |     | (Random AES-256-GCM Key)    |
-    +---------------------------+     +-----------------------------+
-                                                     |
-                                                     | AES-256-GCM (Fresh 12-byte IV)
-                                                     v
+                                       /              \
+                        AES-256-GCM   /                \  ECIES (ECDH P-256 + AES-GCM)
+                       (Owner Key)   v                  v (Collaborator Key)
+                    +-------------------+            +---------------------------+
+                    | Wrapped SCK       |            | ECIES Wrapped SCK         |
+                    | (screenplay_access_keys)        | (screenplay_access_keys)  |
+                    +-------------------+            +---------------------------+
+                                       \              /
+                                        v            v
                                       +-----------------------------+
                                       | Serialized TipTap JSON      |
                                       | (Ciphertext + 128-bit Tag)  |
@@ -186,8 +194,10 @@ karu/
 
 * **Zero-Knowledge End-to-End Encryption (E2EE)**:
   * **2-Tier Key Hierarchy**: $\text{UEK} \rightarrow \text{SCK} \rightarrow \text{AES-256-GCM Document}$.
-  * **User Encryption Identity**: ECDH P-256 asymmetric keypairs with encrypted private keys stored in `user_encryption_identities`.
-  * **Emergency Recovery Kit**: Base32 checksummed recovery key generation and downloadable recovery kit (`.txt`).
+  * **Consolidated Encryption Keys**: Salt, PBKDF2 iterations, ECDH P-256 public key, and UEK-wrapped private key stored in unified `user_encryption_keys`.
+  * **Dual-Wrapped Recovery Credentials**: Secure emergency recovery kit deriving an independent PBKDF2 key to wrap user private keys into `user_recovery_credentials`.
+  * **ECIES Collaborator Sharing**: Cryptographically secure screenplay sharing using NIST P-256 ECDH ephemeral key exchange + AES-256-GCM wrapping with granular RBAC (`owner`, `editor`, `viewer`) in `screenplay_access_keys`.
+  * **Zero Plaintext Fallback**: Complete elimination of unencrypted storage or transmission fallback paths.
   * **Autosave Encryption Loop**: TipTap document JSON is encrypted client-side with fresh 12-byte IVs before transmission.
   * **Secure Decrypt & Load Flow**: Automatic decryption in editor, preview mode, and export modal when the encryption session is unlocked.
   * **Locked Workspace Canvas**: Elegant lock banner preventing plaintext/ciphertext leaks when the session is locked.

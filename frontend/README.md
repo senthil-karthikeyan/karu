@@ -94,9 +94,10 @@ frontend/
 │   │   ├── crypto/            # E2EE components
 │   │   │   ├── encryption-badge.tsx           # Visual lock/unlocked tooltip badge
 │   │   │   ├── encryption-banner.tsx          # Setup prompt banners
-│   │   │   ├── encryption-dialog.tsx          # Passphrase unlock/setup modal
+│   │   │   ├── encryption-dialog.tsx          # Passphrase unlock, setup & recovery modal
 │   │   │   ├── encryption-onboarding-modal.tsx # First-time setup wizard
-│   │   │   └── legacy-migration-card.tsx      # In-place batch encryption migration
+│   │   │   ├── legacy-migration-card.tsx      # In-place batch encryption migration
+│   │   │   └── share-screenplay-modal.tsx     # ECIES collaborator sharing & access revocation
 │   │   ├── dashboard/         # Project cards, metrics, filters
 │   │   ├── editor/            # Screenplay editor, toolbar, scene nav, export
 │   │   ├── landing/           # Hero, feature showcase, footer
@@ -119,11 +120,12 @@ frontend/
 │   │   ├── crypto/            # Client-Side Cryptographic Engine (E2EE)
 │   │   │   ├── aes-gcm.ts     # AES-256-GCM encryption & decryption
 │   │   │   ├── crypto-types.ts # TypeScript interfaces for keys & payloads
+│   │   │   ├── ecies.ts       # ECIES (NIST P-256 ECDH + AES-256-GCM) sharing
 │   │   │   ├── encoding.ts    # Lossless UTF-8 & Base64 conversions
 │   │   │   ├── index.ts       # Barrel export
 │   │   │   ├── key-derivation.ts # PBKDF2-SHA256 (600,000 rounds)
 │   │   │   ├── key-manager.ts # 2-tier key wrapping & ECDH P-256 identity
-│   │   │   ├── recovery.ts    # Emergency recovery key generator & kit
+│   │   │   ├── recovery.ts    # Emergency recovery key generator, PBKDF2 derivation & kit
 │   │   │   └── screenplay-encryption.ts # TipTap JSON AST encryption & parsing
 │   │   ├── date.ts            # Relative time formatting
 │   │   ├── export-utils.ts    # PDF, Fountain & Plain Text converters
@@ -147,16 +149,27 @@ frontend/
 
 ## 🔐 Zero-Knowledge Cryptographic Engine (`src/lib/crypto`)
 
-### 1. Key Hierarchy
+### 1. Key Hierarchy & Sharing
 
-Karu implements a 2-tier direct key architecture:
+Karu implements a 2-tier direct key architecture with asymmetric sharing and recovery:
 
-1. **Tier 1 — User Encryption Key (`UEK`)**:
+1. **Tier 1 — User Encryption Key (`UEK`) & Identity**:
    - Derived client-side via `PBKDF2-SHA256` using the user's secret passphrase, 32-byte CSPRNG salt, and **600,000 iterations**.
    - Held strictly in non-persistent JavaScript memory (Zustand). Never stored in `localStorage`, `sessionStorage`, or cookies.
+   - User identity consists of an asymmetric NIST P-256 ECDH keypair: public key stored on backend; private key encrypted with UEK (AES-256-GCM).
 2. **Tier 2 — Screenplay Content Key (`SCK`) & Document Encryption**:
-   - `SCK`: Unique 256-bit AES-GCM key generated per screenplay and directly wrapped with the user's `UEK`.
-   - `Document Payload`: Serialized TipTap JSON encrypted with `SCK` using a fresh 12-byte random IV.
+   - `SCK`: Unique 256-bit AES-GCM key generated per screenplay and wrapped directly with the owner's `UEK` or via ECIES.
+   - `Document Payload`: Serialized TipTap JSON encrypted with `SCK` using a fresh 12-byte random IV. Zero plaintext fallback paths exist.
+3. **ECIES Screenplay Sharing (`lib/crypto/ecies.ts`)**:
+   - Allows sharing screenplays with collaborators without exposing passphrases or master keys.
+   - Generates an ephemeral ECDH P-256 keypair, derives an AES-256-GCM wrapping key against the recipient's public key (SPKI), and wraps the SCK.
+   - Recipient unwraps the SCK using their private ECDH key and the ephemeral public key.
+   - Supports role-based access control (`owner`, `editor`, `viewer`).
+4. **Zero-Knowledge Emergency Recovery (`lib/crypto/recovery.ts`)**:
+   - Generates high-entropy recovery codes (`KARU-XXXX-XXXX-...`).
+   - Derives a separate recovery wrapping key via PBKDF2-SHA256 (600,000 iterations).
+   - Double-wraps the user's private key under this recovery wrapping key and stores it in `user_recovery_credentials`.
+   - On forgotten passphrases, client derives the recovery wrapping key from the code, unwraps the private key in-memory, prompts for a new passphrase, and re-wraps credentials without server involvement.
 
 ### 2. Client-Side Statistics Calculation
 

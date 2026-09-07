@@ -101,18 +101,19 @@ backend/
 │   │   ├── 000009_cleanup_legacy_schema.up.sql
 │   │   ├── 000010_cleanup_legacy_screenplay_schema.up.sql
 │   │   ├── 000011_enforce_screenplay_keys_fk.up.sql
-│   │   └── 000012_move_stats_to_screenplays.up.sql
+│   │   ├── 000012_move_stats_to_screenplays.up.sql
+│   │   └── 000013_e2ee_schema_revamp.up.sql
 │   └── queries/               # sqlc SQL query definitions
 │       ├── activities.sql
 │       ├── auth_identities.sql
 │       ├── projects.sql
 │       ├── refresh_tokens.sql
+│       ├── screenplay_access_keys.sql
 │       ├── screenplay_contents.sql
-│       ├── screenplay_keys.sql
 │       ├── screenplay_versions.sql
 │       ├── screenplays.sql
-│       ├── user_encryption_identities.sql
-│       ├── user_encryption_metadata.sql
+│       ├── user_encryption_keys.sql
+│       ├── user_recovery_credentials.sql
 │       └── users.sql
 ├── internal/
 │   ├── auth/                  # Password hashing (bcrypt), JWT, and Goth OAuth
@@ -182,11 +183,12 @@ The Go backend operates on a strict **Zero-Knowledge Principle**:
 1. **Zero Plaintext Exposure**: Screenplay content, revisions, and checkpoints exist only as AES-256-GCM ciphertext blobs with associated 12-byte IVs and 128-bit authentication tags.
 2. **Screenplay-Level Statistics**: Screenplay statistics (`word_count`, `page_count`, `scene_count`) are calculated locally in the browser from the decrypted TipTap AST and persisted with the encrypted content update.
 3. **Pure Project Metadata**: The `projects` table stores only project-level metadata (`title`, `genre`, `format`, `logline`, `synopsis`, `status`, `cover_image`).
-4. **Zero Key Knowledge**: The backend stores only wrapped keys:
-   - `user_encryption_metadata`: Stores salt & PBKDF2 iterations for client-side UEK derivation.
-   - `user_encryption_identities`: Stores the user's public ECDH key (SPKI) and wrapped private key (PKCS#8 wrapped with UEK).
-   - `screenplay_keys`: Stores the random Screenplay Content Key (`SCK`) directly wrapped with the user's `UEK` (Canonical 2-Tier Hierarchy: Passphrase -> UEK -> SCK -> Content).
-5. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies historical encrypted payloads directly into `screenplay_contents` without server-side decryption.
+4. **Zero Key Knowledge**: The backend stores only wrapped keys and public keys:
+   - `user_encryption_keys`: Stores salt & PBKDF2 iterations for client-side UEK derivation, the user's public ECDH P-256 key (SPKI), and the user's UEK-wrapped ECDH private key.
+   - `user_recovery_credentials`: Stores recovery salt, iterations, and double-wrapped private key (wrapped with a PBKDF2-derived recovery wrapping key) for zero-knowledge account recovery.
+   - `screenplay_access_keys`: Stores random Screenplay Content Keys (`SCK`) wrapped for owners and collaborators via ECIES (NIST P-256 ECDH + AES-256-GCM), with role-based access control (`owner`, `editor`, `viewer`).
+5. **Zero Plaintext Fallback**: The API and database strictly reject unencrypted screenplay content. All content saves require valid AES-256-GCM ciphertext payloads.
+6. **Atomic Zero-Knowledge Restorations**: `RestoreVersion` transactionally copies historical encrypted payloads directly into `screenplay_contents` without server-side decryption, protected by optimistic concurrency controls.
 
 ---
 
@@ -227,6 +229,7 @@ r.Use(middleware.CORS(deps.Config.CORS))
 10. `000010_cleanup_legacy_screenplay_schema`: Drops deprecated `projects.screenplay_content`, `project_keys`, and `scenes` tables.
 11. `000011_enforce_screenplay_keys_fk`: Enforces `FOREIGN KEY (screenplay_id) REFERENCES screenplays(id) ON DELETE CASCADE` on `screenplay_keys`.
 12. `000012_move_stats_to_screenplays`: Moves screenplay statistics (`word_count`, `page_count`, `scene_count`) from `projects` to `screenplays` and removes `last_edited_scene`.
+13. `000013_e2ee_schema_revamp`: Consolidates user encryption tables into `user_encryption_keys`, adds `user_recovery_credentials`, renames `screenplay_keys` to `screenplay_access_keys` with ECIES support (`ephemeral_public_key`) and RBAC roles (`owner`, `editor`, `viewer`), and permanently drops plaintext `content` and `is_encrypted` columns from `screenplay_contents` and `screenplay_versions`.
 
 ---
 
@@ -250,18 +253,21 @@ r.Use(middleware.CORS(deps.Config.CORS))
 | `POST` | `/api/v1/auth/logout` | No | Revoke refresh token session in database |
 | `GET` | `/api/v1/auth/google` | No | Initiate Google OAuth flow via Goth |
 | `GET` | `/api/v1/auth/google/callback` | No | Complete Google OAuth callback and issue tokens |
+| `POST` | `/api/v1/auth/recovery/lookup` | No | Lookup recovery salt and wrapped private key by email |
+| `POST` | `/api/v1/auth/recovery/reset` | No | Reset user encryption keys via client-side recovery proof |
 
-### User Profile & Encryption Identities
+### User Profile & Encryption Keys
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/users/me` | **Yes** | Retrieve authenticated user profile and preferences |
 | `PATCH` | `/api/v1/users/me` | **Yes** | Update user name, bio, avatar, or editor preferences |
-| `GET` | `/api/v1/users/me/encryption-metadata` | **Yes** | Get user's salt and PBKDF2 parameters for deriving UEK |
-| `POST` | `/api/v1/users/me/encryption-metadata` | **Yes** | Set or update user's encryption salt and PBKDF2 configuration |
-| `GET` | `/api/v1/users/me/encryption-identity` | **Yes** | Retrieve authenticated user's ECDH P-256 identity keypair |
-| `POST` | `/api/v1/users/me/encryption-identity` | **Yes** | Store or update user's ECDH P-256 identity keypair |
+| `GET` | `/api/v1/users/lookup` | **Yes** | Lookup user by email to retrieve user ID and public key for sharing |
 | `GET` | `/api/v1/users/:id/public-key` | **Yes** | Retrieve public key (SPKI) for another user by ID |
+| `GET` | `/api/v1/users/me/encryption-keys` | **Yes** | Retrieve user's encryption keys, salt, iterations, and wrapped private key |
+| `POST` | `/api/v1/users/me/encryption-keys` | **Yes** | Store or update user's encryption keys and parameters |
+| `GET` | `/api/v1/users/me/recovery-credentials` | **Yes** | Retrieve user's recovery parameters and double-wrapped private key |
+| `POST` | `/api/v1/users/me/recovery-credentials` | **Yes** | Store user's recovery credentials during onboarding or key rotation |
 
 ### Projects
 
@@ -275,7 +281,7 @@ r.Use(middleware.CORS(deps.Config.CORS))
 | `GET` | `/api/v1/projects/:id/screenplay` | **Yes** | Get default canonical screenplay for project |
 | `GET` | `/api/v1/projects/:id/activities` | **Yes** | List project activity history audit log |
 
-### Screenplays, Content, Keys & Versions
+### Screenplays, Content, Keys, Sharing & Versions
 
 | Method | Endpoint | Auth | Description |
 | :--- | :--- | :--- | :--- |
@@ -284,10 +290,13 @@ r.Use(middleware.CORS(deps.Config.CORS))
 | `GET` | `/api/v1/screenplays/:id` | **Yes** | Get screenplay details, statistics, and current content |
 | `PATCH` | `/api/v1/screenplays/:id` | **Yes** | Update screenplay title, description, or statistics |
 | `DELETE` | `/api/v1/screenplays/:id` | **Yes** | Delete screenplay and cascade keys, content, and versions |
-| `GET` | `/api/v1/screenplays/:id/key` | **Yes** | Retrieve authenticated user's wrapped SCK |
-| `POST` | `/api/v1/screenplays/:id/key` | **Yes** | Store or update wrapped SCK |
-| `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current content (ciphertext or plaintext) and revision |
-| `PUT` | `/api/v1/screenplays/:id/content` | **Yes** | Autosave content & update statistics with OCC (409 on revision conflict) |
+| `GET` | `/api/v1/screenplays/:id/key` | **Yes** | Retrieve authenticated user's wrapped SCK (with ephemeral public key if shared) |
+| `POST` | `/api/v1/screenplays/:id/key` | **Yes** | Store or update owner's wrapped SCK |
+| `POST` | `/api/v1/screenplays/:id/shares` | **Yes** | Share screenplay with collaborator via ECIES-wrapped SCK and role |
+| `GET` | `/api/v1/screenplays/:id/collaborators` | **Yes** | List screenplay collaborators and assigned roles |
+| `DELETE` | `/api/v1/screenplays/:id/collaborators/:userId` | **Yes** | Revoke collaborator access and remove access key |
+| `GET` | `/api/v1/screenplays/:id/content` | **Yes** | Retrieve current encrypted ciphertext and revision |
+| `PUT` | `/api/v1/screenplays/:id/content` | **Yes** | Autosave encrypted content & update stats with OCC (409 on revision conflict) |
 | `GET` | `/api/v1/screenplays/:id/versions` | **Yes** | List historical version checkpoints |
 | `POST` | `/api/v1/screenplays/:id/versions` | **Yes** | Create a named version checkpoint (stores ciphertext snapshot) |
 | `GET` | `/api/v1/screenplays/:id/versions/:versionId` | **Yes** | Retrieve a specific historical version snapshot |

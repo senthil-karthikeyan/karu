@@ -7,9 +7,8 @@
  * 3. IV uniqueness & ciphertext non-determinism
  * 4. Authentication tag tampering & wrong key rejection
  * 5. PBKDF2 key derivation (UEK)
- * 6. 3-Tier Key Hierarchy:
- *    - UEK (User Encryption Key) wraps PEK (Project Encryption Key)
- *    - PEK (Project Encryption Key) wraps SCK (Screenplay Content Key)
+ * 6. Canonical 2-Tier Key Hierarchy:
+ *    - UEK (User Encryption Key) wraps SCK (Screenplay Content Key)
  *    - SCK encrypts and decrypts TipTap screenplay content
  * 7. User Encryption Identity (ECDH P-256) keypair generation and private key wrapping
  * 8. TipTap JSON document round-trip
@@ -196,7 +195,6 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
     }
   });
 
-  // 7. Key Hierarchy: Project Encryption Key (PEK) Wrapped by UEK
   // 7. Canonical Key Hierarchy: Screenplay Content Key (SCK) Wrapped by UEK
   await test("Canonical 2-Tier: UEK wraps and unwraps Screenplay Content Key (SCK)", async () => {
     const uek = await deriveUserEncryptionKey("user-passphrase", generateSalt(16), { iterations: 5000 });
