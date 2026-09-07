@@ -35,6 +35,13 @@ import {
   utf8BytesToString,
   normalizeScreenplayDoc,
   type TipTapDocumentJSON,
+  wrapKeyWithECIES,
+  unwrapKeyWithECIES,
+  generateEmergencyRecoveryKey,
+  deriveRecoveryWrappingKey,
+  wrapPrivateKeyWithRecoveryKey,
+  unwrapPrivateKeyWithRecoveryKey,
+  validateRecoveryKeyFormat,
 } from "../index";
 
 export interface TestResult {
@@ -623,6 +630,168 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
 
     if (!crossDecryptFailed) {
       throw new Error("Cross-screenplay decryption should fail authentication tag check!");
+    }
+  });
+
+  // 18. ECIES Asymmetric Sharing: User A wraps SCK for User B, User B unwraps SCK
+  await test("ECIES: Asymmetric Screenplay Key Wrapping & Unwrapping (User A -> User B)", async () => {
+    // 1. User B (recipient) creates identity keypair
+    const userBKeys = await generateUserIdentityKeyPair();
+    const userBPublicExport = await exportUserIdentityPublicKey(userBKeys.publicKey);
+
+    // 2. User A generates screenplay key
+    const sck = await generateScreenplayContentKey();
+
+    // 3. User A wraps SCK with User B's public key via ECIES
+    const eciesPayload = await wrapKeyWithECIES(userBPublicExport.publicKey, sck);
+
+    if (eciesPayload.algorithm !== "ECIES-P256-AES-GCM") {
+      throw new Error(`Expected ECIES algorithm ECIES-P256-AES-GCM, got ${eciesPayload.algorithm}`);
+    }
+    if (!eciesPayload.ephemeralPublicKey || !eciesPayload.wrappedKey || !eciesPayload.iv) {
+      throw new Error("ECIES payload is missing required cryptographic fields");
+    }
+
+    // 4. User B unwraps SCK using their own private key
+    const unwrappedSCK = await unwrapKeyWithECIES(userBKeys.privateKey, eciesPayload);
+
+    // 5. Verify unwrapped SCK can decrypt content encrypted with original SCK
+    const testDoc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [{ type: "action", content: [{ type: "text", text: "Shared screenplay collaboration test." }] }],
+    };
+    const encrypted = await encryptScreenplayContent(testDoc, sck);
+    const decrypted = await decryptScreenplayContent(encrypted, unwrappedSCK);
+
+    if (JSON.stringify(decrypted) !== JSON.stringify(testDoc)) {
+      throw new Error("ECIES unwrapped SCK failed to decrypt screenplay content!");
+    }
+  });
+
+  // 19. ECIES Multi-User Isolation: User C cannot unwrap SCK intended for User B
+  await test("ECIES: Key unwrapping rejected by incorrect recipient private key", async () => {
+    const userBKeys = await generateUserIdentityKeyPair();
+    const userCKeys = await generateUserIdentityKeyPair();
+    const userBPublicExport = await exportUserIdentityPublicKey(userBKeys.publicKey);
+
+    const sck = await generateScreenplayContentKey();
+    const eciesPayload = await wrapKeyWithECIES(userBPublicExport.publicKey, sck);
+
+    let rejectedUnauthorized = false;
+    try {
+      await unwrapKeyWithECIES(userCKeys.privateKey, eciesPayload);
+    } catch {
+      rejectedUnauthorized = true;
+    }
+
+    if (!rejectedUnauthorized) {
+      throw new Error("ECIES unwrapping MUST fail when attempted with wrong recipient private key!");
+    }
+  });
+
+  // 20. ECIES Tamper Detection: Modified ciphertext or IV fails unwrapping
+  await test("ECIES: Tampered ciphertext or ephemeral public key fails authentication", async () => {
+    const userBKeys = await generateUserIdentityKeyPair();
+    const userBPublicExport = await exportUserIdentityPublicKey(userBKeys.publicKey);
+    const sck = await generateScreenplayContentKey();
+    const eciesPayload = await wrapKeyWithECIES(userBPublicExport.publicKey, sck);
+
+    // Tamper with wrappedKey
+    const rawWrapped = base64ToUint8Array(eciesPayload.wrappedKey);
+    rawWrapped[0] ^= 0xff; // flip bit
+    const tamperedPayload = {
+      ...eciesPayload,
+      wrappedKey: uint8ArrayToBase64(rawWrapped),
+    };
+
+    let tamperDetected = false;
+    try {
+      await unwrapKeyWithECIES(userBKeys.privateKey, tamperedPayload);
+    } catch {
+      tamperDetected = true;
+    }
+
+    if (!tamperDetected) {
+      throw new Error("Tampered ECIES ciphertext must fail authentication!");
+    }
+  });
+
+  // 21. Emergency Recovery: PBKDF2 Key Derivation, Double-Wrapping & Private Key Recovery
+  await test("Emergency Recovery: PBKDF2 Key Derivation, Double-Wrapping & Private Key Recovery", async () => {
+    // 1. Generate Emergency Recovery Code
+    const recoveryCode = generateEmergencyRecoveryKey();
+    if (!validateRecoveryKeyFormat(recoveryCode)) {
+      throw new Error(`Generated recovery code does not match required format: ${recoveryCode}`);
+    }
+
+    // 2. Generate User ECDH Identity Keypair
+    const identityKeys = await generateUserIdentityKeyPair();
+    const publicExport = await exportUserIdentityPublicKey(identityKeys.publicKey);
+
+    // 3. Derive Recovery Wrapping Key via PBKDF2
+    const recoverySalt = generateSalt(16);
+    const recoveryWrappingKey = await deriveRecoveryWrappingKey(recoveryCode, recoverySalt, { iterations: 5000 });
+
+    // 4. Wrap Private Key under Recovery Wrapping Key
+    const { wrappedPrivateKey, recoveryKeyIv } = await wrapPrivateKeyWithRecoveryKey(
+      identityKeys.privateKey,
+      recoveryWrappingKey
+    );
+
+    if (!wrappedPrivateKey || !recoveryKeyIv) {
+      throw new Error("Failed to double-wrap private key with recovery key");
+    }
+
+    // 5. Recovery workflow: User enters recovery code -> derives key -> unwraps private key
+    const restoredRecoveryKey = await deriveRecoveryWrappingKey(recoveryCode, recoverySalt, { iterations: 5000 });
+    const recoveredPrivateKey = await unwrapPrivateKeyWithRecoveryKey(
+      wrappedPrivateKey,
+      recoveryKeyIv,
+      restoredRecoveryKey
+    );
+
+    // 6. Test that recovered private key functions identically (ECIES decrypt)
+    const testSCK = await generateScreenplayContentKey();
+    const eciesPayload = await wrapKeyWithECIES(publicExport.publicKey, testSCK);
+    const unwrappedSCK = await unwrapKeyWithECIES(recoveredPrivateKey, eciesPayload);
+
+    const doc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [{ type: "action", content: [{ type: "text", text: "Recovered identity private key verification." }] }],
+    };
+    const enc = await encryptScreenplayContent(doc, testSCK);
+    const dec = await decryptScreenplayContent(enc, unwrappedSCK);
+
+    if (JSON.stringify(dec) !== JSON.stringify(doc)) {
+      throw new Error("Recovered private key failed to decrypt shared content!");
+    }
+  });
+
+  // 22. Emergency Recovery: Incorrect recovery code fails authentication
+  await test("Emergency Recovery: Incorrect recovery code fails decryption", async () => {
+    const recoveryCode = generateEmergencyRecoveryKey();
+    const wrongRecoveryCode = generateEmergencyRecoveryKey();
+    const recoverySalt = generateSalt(16);
+
+    const identityKeys = await generateUserIdentityKeyPair();
+    const recoveryWrappingKey = await deriveRecoveryWrappingKey(recoveryCode, recoverySalt, { iterations: 5000 });
+    const { wrappedPrivateKey, recoveryKeyIv } = await wrapPrivateKeyWithRecoveryKey(
+      identityKeys.privateKey,
+      recoveryWrappingKey
+    );
+
+    // Attempt recovery with wrong recovery code
+    const wrongWrappingKey = await deriveRecoveryWrappingKey(wrongRecoveryCode, recoverySalt, { iterations: 5000 });
+
+    let recoveryRejected = false;
+    try {
+      await unwrapPrivateKeyWithRecoveryKey(wrappedPrivateKey, recoveryKeyIv, wrongWrappingKey);
+    } catch {
+      recoveryRejected = true;
+    }
+
+    if (!recoveryRejected) {
+      throw new Error("Private key unwrap must fail when using wrong recovery code!");
     }
   });
 

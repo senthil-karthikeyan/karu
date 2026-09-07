@@ -124,6 +124,15 @@ type mockScreenplayRepo struct {
 	upsertScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error)
 	deleteScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) error
 
+	getUserEncryptionKeysFunc        func(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error)
+	upsertUserEncryptionKeysFunc     func(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error)
+	getUserRecoveryCredentialFunc    func(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error)
+	upsertUserRecoveryCredentialFunc func(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error)
+	getScreenplayAccessKeyFunc       func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error)
+	upsertScreenplayAccessKeyFunc    func(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error)
+	deleteScreenplayAccessKeyFunc    func(ctx context.Context, screenplayID, userID uuid.UUID) error
+	listCollaboratorsFunc            func(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error)
+
 	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error)
 	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	getOwnershipFunc          func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
@@ -216,10 +225,16 @@ func (m *mockScreenplayRepo) DeleteScreenplayKey(ctx context.Context, screenplay
 }
 
 func (m *mockScreenplayRepo) GetUserEncryptionKeys(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error) {
+	if m.getUserEncryptionKeysFunc != nil {
+		return m.getUserEncryptionKeysFunc(ctx, userID)
+	}
 	return nil, model.ErrNotFound
 }
 
 func (m *mockScreenplayRepo) UpsertUserEncryptionKeys(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error) {
+	if m.upsertUserEncryptionKeysFunc != nil {
+		return m.upsertUserEncryptionKeysFunc(ctx, userID, req)
+	}
 	return &model.UserEncryptionKeysResponse{
 		UserID:        userID,
 		Salt:          req.Salt,
@@ -231,10 +246,16 @@ func (m *mockScreenplayRepo) UpsertUserEncryptionKeys(ctx context.Context, userI
 }
 
 func (m *mockScreenplayRepo) GetUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error) {
+	if m.getUserRecoveryCredentialFunc != nil {
+		return m.getUserRecoveryCredentialFunc(ctx, userID, credType)
+	}
 	return nil, model.ErrNotFound
 }
 
 func (m *mockScreenplayRepo) UpsertUserRecoveryCredential(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error) {
+	if m.upsertUserRecoveryCredentialFunc != nil {
+		return m.upsertUserRecoveryCredentialFunc(ctx, userID, req)
+	}
 	return &model.UserRecoveryCredentialResponse{
 		UserID:         userID,
 		CredentialType: req.CredentialType,
@@ -251,24 +272,34 @@ func (m *mockScreenplayRepo) DeleteUserRecoveryCredential(ctx context.Context, u
 }
 
 func (m *mockScreenplayRepo) GetScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	if m.getScreenplayAccessKeyFunc != nil {
+		return m.getScreenplayAccessKeyFunc(ctx, screenplayID, userID)
+	}
 	return nil, model.ErrScreenplayKeyNotFound
 }
 
 func (m *mockScreenplayRepo) UpsertScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	if m.upsertScreenplayAccessKeyFunc != nil {
+		return m.upsertScreenplayAccessKeyFunc(ctx, screenplayID, userID, req, grantedBy)
+	}
 	return &model.ScreenplayAccessKeyResponse{
-		ScreenplayID: screenplayID,
-		UserID:       userID,
-		Role:         req.Role,
-		KeyIV:        req.KeyIV,
-		WrappedKey:   req.WrappedKey,
-		Version:      req.Version,
-		Algorithm:    req.Algorithm,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ScreenplayID:       screenplayID,
+		UserID:             userID,
+		Role:               req.Role,
+		KeyIV:              req.KeyIV,
+		WrappedKey:         req.WrappedKey,
+		EphemeralPublicKey: req.EphemeralPublicKey,
+		Version:            req.Version,
+		Algorithm:          req.Algorithm,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}, nil
 }
 
 func (m *mockScreenplayRepo) DeleteScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) error {
+	if m.deleteScreenplayAccessKeyFunc != nil {
+		return m.deleteScreenplayAccessKeyFunc(ctx, screenplayID, userID)
+	}
 	return nil
 }
 
@@ -277,6 +308,9 @@ func (m *mockScreenplayRepo) ListScreenplayAccessKeys(ctx context.Context, scree
 }
 
 func (m *mockScreenplayRepo) ListCollaboratorsByScreenplayID(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error) {
+	if m.listCollaboratorsFunc != nil {
+		return m.listCollaboratorsFunc(ctx, screenplayID)
+	}
 	return nil, nil
 }
 

@@ -52,6 +52,15 @@ export function normalizeRecoveryKey(rawKey: string): string {
 }
 
 /**
+ * Validates the format of an Emergency Recovery Code (KARU-XXXX-XXXX-...).
+ */
+export function validateRecoveryKeyFormat(rawKey: string): boolean {
+  if (!rawKey) return false;
+  const normalized = normalizeRecoveryKey(rawKey);
+  return /^KARU(-[0-9A-F]{4}){4,}$/.test(normalized);
+}
+
+/**
  * Derives a 256-bit AES-GCM Recovery Wrapping Key from the recovery code and recovery salt using PBKDF2.
  */
 export async function deriveRecoveryWrappingKey(
