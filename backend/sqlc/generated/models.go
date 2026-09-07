@@ -70,26 +70,27 @@ type Screenplay struct {
 type ScreenplayContent struct {
 	ID                pgtype.UUID        `json:"id"`
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
-	Content           string             `json:"content"`
 	Revision          int64              `json:"revision"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
 	Ciphertext        string             `json:"ciphertext"`
 }
 
-type ScreenplayKey struct {
-	ID           pgtype.UUID        `json:"id"`
-	ScreenplayID pgtype.UUID        `json:"screenplay_id"`
-	UserID       pgtype.UUID        `json:"user_id"`
-	WrappedKey   string             `json:"wrapped_key"`
-	KeyIv        string             `json:"key_iv"`
-	Algorithm    string             `json:"algorithm"`
-	Version      int32              `json:"version"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+type ScreenplayAccessKey struct {
+	ID                 pgtype.UUID        `json:"id"`
+	ScreenplayID       pgtype.UUID        `json:"screenplay_id"`
+	UserID             pgtype.UUID        `json:"user_id"`
+	WrappedKey         string             `json:"wrapped_key"`
+	KeyIv              string             `json:"key_iv"`
+	EphemeralPublicKey string             `json:"ephemeral_public_key"`
+	Algorithm          string             `json:"algorithm"`
+	Version            int32              `json:"version"`
+	Role               string             `json:"role"`
+	GrantedBy          pgtype.UUID        `json:"granted_by"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type ScreenplayVersion struct {
@@ -97,10 +98,8 @@ type ScreenplayVersion struct {
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
 	VersionNumber     int32              `json:"version_number"`
 	Title             string             `json:"title"`
-	Content           string             `json:"content"`
 	CreatedBy         pgtype.UUID        `json:"created_by"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -119,22 +118,27 @@ type User struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-type UserEncryptionIdentity struct {
+type UserEncryptionKey struct {
 	UserID              pgtype.UUID        `json:"user_id"`
+	Salt                string             `json:"salt"`
+	Iterations          int32              `json:"iterations"`
+	HashAlgorithm       string             `json:"hash_algorithm"`
 	PublicKey           string             `json:"public_key"`
 	EncryptedPrivateKey string             `json:"encrypted_private_key"`
-	KeyIv               string             `json:"key_iv"`
+	PrivateKeyIv        string             `json:"private_key_iv"`
 	Algorithm           string             `json:"algorithm"`
 	Version             int32              `json:"version"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
-type UserEncryptionMetadatum struct {
-	UserID        pgtype.UUID        `json:"user_id"`
-	Salt          string             `json:"salt"`
-	Iterations    int32              `json:"iterations"`
-	HashAlgorithm string             `json:"hash_algorithm"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+type UserRecoveryCredential struct {
+	UserID                pgtype.UUID        `json:"user_id"`
+	RecoverySalt          string             `json:"recovery_salt"`
+	RecoveryIterations    int32              `json:"recovery_iterations"`
+	RecoveryHashAlgorithm string             `json:"recovery_hash_algorithm"`
+	WrappedPrivateKey     string             `json:"wrapped_private_key"`
+	RecoveryKeyIv         string             `json:"recovery_key_iv"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 }

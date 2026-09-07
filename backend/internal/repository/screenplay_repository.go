@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -15,17 +16,29 @@ import (
 )
 
 type ScreenplayRepository interface {
-	// User Encryption Metadata & Identity
+	// User Encryption Keys (Consolidated)
 	GetUserEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error)
 	UpsertUserEncryptionMetadata(ctx context.Context, userID uuid.UUID, salt string, iterations int, hashAlgo string) (*model.UserEncryptionMetadataResponse, error)
 	GetUserEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error)
 	GetUserPublicKey(ctx context.Context, userID uuid.UUID) (*model.UserPublicKeyResponse, error)
 	UpsertUserEncryptionIdentity(ctx context.Context, userID uuid.UUID, publicKey, encryptedPrivateKey, keyIV, algorithm string, version int) (*model.UserEncryptionIdentityPayload, error)
+	GetUserEncryptionKeys(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error)
+	UpsertUserEncryptionKeys(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error)
 
-	// Screenplay Keys
+	// User Recovery Credentials
+	GetUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error)
+	UpsertUserRecoveryCredential(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error)
+	DeleteUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) error
+
+	// Screenplay Access Keys & Sharing
 	GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
 	UpsertScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error)
 	DeleteScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) error
+	GetScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error)
+	UpsertScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error)
+	DeleteScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) error
+	ListScreenplayAccessKeys(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayAccessKeyResponse, error)
+	ListCollaboratorsByScreenplayID(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error)
 
 	// Screenplay CRUD & Content
 	CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error)
@@ -84,14 +97,11 @@ func toCreateVersionResponse(v generated.CreateScreenplayVersionRow) model.Scree
 		createdBy = &id
 	}
 
-	var content interface{} = v.Content
-	if v.IsEncrypted {
-		content = &model.EncryptedPayload{
-			Version:    int(v.EncryptionVersion),
-			Algorithm:  v.Algorithm,
-			IV:         v.Iv,
-			Ciphertext: v.Ciphertext,
-		}
+	content := &model.EncryptedPayload{
+		Version:    int(v.EncryptionVersion),
+		Algorithm:  v.Algorithm,
+		IV:         v.Iv,
+		Ciphertext: v.Ciphertext,
 	}
 
 	return model.ScreenplayVersionResponse{
@@ -100,7 +110,7 @@ func toCreateVersionResponse(v generated.CreateScreenplayVersionRow) model.Scree
 		VersionNumber:     int(v.VersionNumber),
 		Title:             v.Title,
 		Content:           content,
-		IsEncrypted:       v.IsEncrypted,
+		IsEncrypted:       true,
 		EncryptionVersion: int(v.EncryptionVersion),
 		Algorithm:         v.Algorithm,
 		IV:                v.Iv,
@@ -117,14 +127,11 @@ func toListVersionResponse(v generated.ListScreenplayVersionsByScreenplayIDRow) 
 		createdBy = &id
 	}
 
-	var content interface{} = v.Content
-	if v.IsEncrypted {
-		content = &model.EncryptedPayload{
-			Version:    int(v.EncryptionVersion),
-			Algorithm:  v.Algorithm,
-			IV:         v.Iv,
-			Ciphertext: v.Ciphertext,
-		}
+	content := &model.EncryptedPayload{
+		Version:    int(v.EncryptionVersion),
+		Algorithm:  v.Algorithm,
+		IV:         v.Iv,
+		Ciphertext: v.Ciphertext,
 	}
 
 	return model.ScreenplayVersionResponse{
@@ -133,7 +140,7 @@ func toListVersionResponse(v generated.ListScreenplayVersionsByScreenplayIDRow) 
 		VersionNumber:     int(v.VersionNumber),
 		Title:             v.Title,
 		Content:           content,
-		IsEncrypted:       v.IsEncrypted,
+		IsEncrypted:       true,
 		EncryptionVersion: int(v.EncryptionVersion),
 		Algorithm:         v.Algorithm,
 		IV:                v.Iv,
@@ -150,14 +157,11 @@ func toGetVersionResponse(v generated.GetScreenplayVersionByIDRow) model.Screenp
 		createdBy = &id
 	}
 
-	var content interface{} = v.Content
-	if v.IsEncrypted {
-		content = &model.EncryptedPayload{
-			Version:    int(v.EncryptionVersion),
-			Algorithm:  v.Algorithm,
-			IV:         v.Iv,
-			Ciphertext: v.Ciphertext,
-		}
+	content := &model.EncryptedPayload{
+		Version:    int(v.EncryptionVersion),
+		Algorithm:  v.Algorithm,
+		IV:         v.Iv,
+		Ciphertext: v.Ciphertext,
 	}
 
 	return model.ScreenplayVersionResponse{
@@ -166,7 +170,7 @@ func toGetVersionResponse(v generated.GetScreenplayVersionByIDRow) model.Screenp
 		VersionNumber:     int(v.VersionNumber),
 		Title:             v.Title,
 		Content:           content,
-		IsEncrypted:       v.IsEncrypted,
+		IsEncrypted:       true,
 		EncryptionVersion: int(v.EncryptionVersion),
 		Algorithm:         v.Algorithm,
 		IV:                v.Iv,
@@ -176,10 +180,10 @@ func toGetVersionResponse(v generated.GetScreenplayVersionByIDRow) model.Screenp
 	}
 }
 
-// User Encryption Metadata & Identity
+// User Encryption Metadata & Identity & Consolidated Keys
 
 func (r *screenplayRepository) GetUserEncryptionMetadata(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionMetadataResponse, error) {
-	m, err := r.queries.GetUserEncryptionMetadata(ctx, uuidToPgtype(userID))
+	m, err := r.queries.GetUserEncryptionSalt(ctx, uuidToPgtype(userID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
@@ -198,7 +202,7 @@ func (r *screenplayRepository) GetUserEncryptionMetadata(ctx context.Context, us
 }
 
 func (r *screenplayRepository) UpsertUserEncryptionMetadata(ctx context.Context, userID uuid.UUID, salt string, iterations int, hashAlgo string) (*model.UserEncryptionMetadataResponse, error) {
-	m, err := r.queries.UpsertUserEncryptionMetadata(ctx, generated.UpsertUserEncryptionMetadataParams{
+	m, err := r.queries.UpsertUserEncryptionSalt(ctx, generated.UpsertUserEncryptionSaltParams{
 		UserID:        uuidToPgtype(userID),
 		Salt:          salt,
 		Iterations:    int32(iterations),
@@ -219,23 +223,26 @@ func (r *screenplayRepository) UpsertUserEncryptionMetadata(ctx context.Context,
 }
 
 func (r *screenplayRepository) GetUserEncryptionIdentity(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionIdentityPayload, error) {
-	ident, err := r.queries.GetUserEncryptionIdentity(ctx, uuidToPgtype(userID))
+	row, err := r.queries.GetUserEncryptionKeys(ctx, uuidToPgtype(userID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, model.ErrNotFound
 		}
 		return nil, err
 	}
+	if row.PublicKey == "" || row.EncryptedPrivateKey == "" || row.PrivateKeyIv == "" {
+		return nil, model.ErrNotFound
+	}
 
 	return &model.UserEncryptionIdentityPayload{
-		UserID:              pgtypeToUUID(ident.UserID),
-		PublicKey:           ident.PublicKey,
-		EncryptedPrivateKey: ident.EncryptedPrivateKey,
-		KeyIV:               ident.KeyIv,
-		Algorithm:           ident.Algorithm,
-		Version:             int(ident.Version),
-		CreatedAt:           pgtypeToTime(ident.CreatedAt),
-		UpdatedAt:           pgtypeToTime(ident.UpdatedAt),
+		UserID:              pgtypeToUUID(row.UserID),
+		PublicKey:           row.PublicKey,
+		EncryptedPrivateKey: row.EncryptedPrivateKey,
+		KeyIV:               row.PrivateKeyIv,
+		Algorithm:           row.Algorithm,
+		Version:             int(row.Version),
+		CreatedAt:           pgtypeToTime(row.CreatedAt),
+		UpdatedAt:           pgtypeToTime(row.UpdatedAt),
 	}, nil
 }
 
@@ -247,6 +254,9 @@ func (r *screenplayRepository) GetUserPublicKey(ctx context.Context, userID uuid
 		}
 		return nil, err
 	}
+	if row.PublicKey == "" {
+		return nil, model.ErrNotFound
+	}
 
 	return &model.UserPublicKeyResponse{
 		UserID:    pgtypeToUUID(row.UserID),
@@ -257,11 +267,11 @@ func (r *screenplayRepository) GetUserPublicKey(ctx context.Context, userID uuid
 }
 
 func (r *screenplayRepository) UpsertUserEncryptionIdentity(ctx context.Context, userID uuid.UUID, publicKey, encryptedPrivateKey, keyIV, algorithm string, version int) (*model.UserEncryptionIdentityPayload, error) {
-	ident, err := r.queries.UpsertUserEncryptionIdentity(ctx, generated.UpsertUserEncryptionIdentityParams{
+	ident, err := r.queries.UpsertUserEncryptionKeyPair(ctx, generated.UpsertUserEncryptionKeyPairParams{
 		UserID:              uuidToPgtype(userID),
 		PublicKey:           publicKey,
 		EncryptedPrivateKey: encryptedPrivateKey,
-		KeyIv:               keyIV,
+		PrivateKeyIv:        keyIV,
 		Algorithm:           algorithm,
 		Version:             int32(version),
 	})
@@ -273,7 +283,7 @@ func (r *screenplayRepository) UpsertUserEncryptionIdentity(ctx context.Context,
 		UserID:              pgtypeToUUID(ident.UserID),
 		PublicKey:           ident.PublicKey,
 		EncryptedPrivateKey: ident.EncryptedPrivateKey,
-		KeyIV:               ident.KeyIv,
+		KeyIV:               ident.PrivateKeyIv,
 		Algorithm:           ident.Algorithm,
 		Version:             int(ident.Version),
 		CreatedAt:           pgtypeToTime(ident.CreatedAt),
@@ -281,10 +291,164 @@ func (r *screenplayRepository) UpsertUserEncryptionIdentity(ctx context.Context,
 	}, nil
 }
 
-// Screenplay Keys
+func (r *screenplayRepository) GetUserEncryptionKeys(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error) {
+	row, err := r.queries.GetUserEncryptionKeys(ctx, uuidToPgtype(userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	pub := row.PublicKey
+	priv := row.EncryptedPrivateKey
+	iv := row.PrivateKeyIv
+
+	return &model.UserEncryptionKeysResponse{
+		UserID:              pgtypeToUUID(row.UserID),
+		Salt:                row.Salt,
+		Iterations:          int(row.Iterations),
+		HashAlgorithm:       row.HashAlgorithm,
+		PublicKey:           &pub,
+		EncryptedPrivateKey: &priv,
+		KeyIV:               &iv,
+		Algorithm:           row.Algorithm,
+		Version:             int(row.Version),
+		CreatedAt:           pgtypeToTime(row.CreatedAt),
+		UpdatedAt:           pgtypeToTime(row.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) UpsertUserEncryptionKeys(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error) {
+	algo := req.Algorithm
+	if algo == "" {
+		algo = model.ExpectedAsymmetricAlgorithm
+	}
+	version := req.Version
+	if version == 0 {
+		version = model.ExpectedEncryptionVersion
+	}
+
+	var pub, priv, iv string
+	if req.PublicKey != nil {
+		pub = *req.PublicKey
+	}
+	if req.EncryptedPrivateKey != nil {
+		priv = *req.EncryptedPrivateKey
+	}
+	if req.KeyIV != nil {
+		iv = *req.KeyIV
+	}
+
+	row, err := r.queries.UpsertUserEncryptionKeys(ctx, generated.UpsertUserEncryptionKeysParams{
+		UserID:              uuidToPgtype(userID),
+		Salt:                req.Salt,
+		Iterations:          int32(req.Iterations),
+		HashAlgorithm:       req.HashAlgorithm,
+		PublicKey:           pub,
+		EncryptedPrivateKey: priv,
+		PrivateKeyIv:        iv,
+		Algorithm:           algo,
+		Version:             int32(version),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rPub := row.PublicKey
+	rPriv := row.EncryptedPrivateKey
+	rIv := row.PrivateKeyIv
+
+	return &model.UserEncryptionKeysResponse{
+		UserID:              pgtypeToUUID(row.UserID),
+		Salt:                row.Salt,
+		Iterations:          int(row.Iterations),
+		HashAlgorithm:       row.HashAlgorithm,
+		PublicKey:           &rPub,
+		EncryptedPrivateKey: &rPriv,
+		KeyIV:               &rIv,
+		Algorithm:           row.Algorithm,
+		Version:             int(row.Version),
+		CreatedAt:           pgtypeToTime(row.CreatedAt),
+		UpdatedAt:           pgtypeToTime(row.UpdatedAt),
+	}, nil
+}
+
+// User Recovery Credentials
+
+func (r *screenplayRepository) GetUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error) {
+	row, err := r.queries.GetUserRecoveryCredentials(ctx, uuidToPgtype(userID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &model.UserRecoveryCredentialResponse{
+		UserID:                  pgtypeToUUID(row.UserID),
+		CredentialType:          credType,
+		Salt:                    row.RecoverySalt,
+		Iterations:              int(row.RecoveryIterations),
+		HashAlgorithm:           row.RecoveryHashAlgorithm,
+		DoubleWrappedDEK:        &row.WrappedPrivateKey,
+		DoubleWrappedPrivateKey: &row.WrappedPrivateKey,
+		KeyIV:                   row.RecoveryKeyIv,
+		Version:                 1,
+		CreatedAt:               pgtypeToTime(row.CreatedAt),
+		UpdatedAt:               pgtypeToTime(row.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) UpsertUserRecoveryCredential(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error) {
+	hashAlgo := req.HashAlgorithm
+	if hashAlgo == "" {
+		hashAlgo = model.ExpectedHashAlgorithm
+	}
+
+	wrapped := ""
+	if req.DoubleWrappedPrivateKey != nil {
+		wrapped = *req.DoubleWrappedPrivateKey
+	} else if req.DoubleWrappedDEK != nil {
+		wrapped = *req.DoubleWrappedDEK
+	}
+
+	row, err := r.queries.UpsertUserRecoveryCredentials(ctx, generated.UpsertUserRecoveryCredentialsParams{
+		UserID:                uuidToPgtype(userID),
+		RecoverySalt:          req.Salt,
+		RecoveryIterations:    int32(req.Iterations),
+		RecoveryHashAlgorithm: hashAlgo,
+		WrappedPrivateKey:     wrapped,
+		RecoveryKeyIv:         req.KeyIV,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.UserRecoveryCredentialResponse{
+		UserID:                  pgtypeToUUID(row.UserID),
+		CredentialType:          req.CredentialType,
+		Salt:                    row.RecoverySalt,
+		Iterations:              int(row.RecoveryIterations),
+		HashAlgorithm:           row.RecoveryHashAlgorithm,
+		DoubleWrappedDEK:        &row.WrappedPrivateKey,
+		DoubleWrappedPrivateKey: &row.WrappedPrivateKey,
+		KeyIV:                   row.RecoveryKeyIv,
+		Version:                 1,
+		CreatedAt:               pgtypeToTime(row.CreatedAt),
+		UpdatedAt:               pgtypeToTime(row.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) DeleteUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) error {
+	_, err := r.pool.Exec(ctx, "DELETE FROM user_recovery_credentials WHERE user_id = $1", uuidToPgtype(userID))
+	return err
+}
+
+// Screenplay Access Keys
 
 func (r *screenplayRepository) GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
-	k, err := r.queries.GetScreenplayKeyByScreenplayAndUser(ctx, generated.GetScreenplayKeyByScreenplayAndUserParams{
+	k, err := r.queries.GetScreenplayAccessKeyByScreenplayAndUser(ctx, generated.GetScreenplayAccessKeyByScreenplayAndUserParams{
 		ScreenplayID: uuidToPgtype(screenplayID),
 		UserID:       uuidToPgtype(userID),
 	})
@@ -295,25 +459,42 @@ func (r *screenplayRepository) GetScreenplayKey(ctx context.Context, screenplayI
 		return nil, err
 	}
 
+	var grantedBy *uuid.UUID
+	if k.GrantedBy.Valid {
+		id := uuid.UUID(k.GrantedBy.Bytes)
+		grantedBy = &id
+	}
+
+	var ephPub *string
+	if k.EphemeralPublicKey != "" {
+		ephPub = &k.EphemeralPublicKey
+	}
+
 	return &model.ScreenplayKeyResponse{
-		ScreenplayID: pgtypeToUUID(k.ScreenplayID),
-		Version:      int(k.Version),
-		Algorithm:    k.Algorithm,
-		IV:           k.KeyIv,
-		WrappedKey:   k.WrappedKey,
-		CreatedAt:    pgtypeToTime(k.CreatedAt),
-		UpdatedAt:    pgtypeToTime(k.UpdatedAt),
+		ScreenplayID:       pgtypeToUUID(k.ScreenplayID),
+		Version:            int(k.Version),
+		Algorithm:          k.Algorithm,
+		IV:                 k.KeyIv,
+		WrappedKey:         k.WrappedKey,
+		Role:               k.Role,
+		EphemeralPublicKey: ephPub,
+		GrantedBy:          grantedBy,
+		CreatedAt:          pgtypeToTime(k.CreatedAt),
+		UpdatedAt:          pgtypeToTime(k.UpdatedAt),
 	}, nil
 }
 
 func (r *screenplayRepository) UpsertScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error) {
-	k, err := r.queries.UpsertScreenplayKey(ctx, generated.UpsertScreenplayKeyParams{
-		ScreenplayID: uuidToPgtype(screenplayID),
-		UserID:       uuidToPgtype(userID),
-		WrappedKey:   wrappedKey,
-		KeyIv:        keyIV,
-		Algorithm:    algorithm,
-		Version:      int32(version),
+	k, err := r.queries.UpsertScreenplayAccessKey(ctx, generated.UpsertScreenplayAccessKeyParams{
+		ScreenplayID:       uuidToPgtype(screenplayID),
+		UserID:             uuidToPgtype(userID),
+		WrappedKey:         wrappedKey,
+		KeyIv:              keyIV,
+		EphemeralPublicKey: "",
+		Algorithm:          algorithm,
+		Version:            int32(version),
+		Role:               "owner",
+		GrantedBy:          uuidToPgtype(userID),
 	})
 	if err != nil {
 		return nil, err
@@ -325,16 +506,181 @@ func (r *screenplayRepository) UpsertScreenplayKey(ctx context.Context, screenpl
 		Algorithm:    k.Algorithm,
 		IV:           k.KeyIv,
 		WrappedKey:   k.WrappedKey,
+		Role:         k.Role,
 		CreatedAt:    pgtypeToTime(k.CreatedAt),
 		UpdatedAt:    pgtypeToTime(k.UpdatedAt),
 	}, nil
 }
 
 func (r *screenplayRepository) DeleteScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) error {
-	return r.queries.DeleteScreenplayKey(ctx, generated.DeleteScreenplayKeyParams{
+	return r.queries.DeleteScreenplayAccessKey(ctx, generated.DeleteScreenplayAccessKeyParams{
 		ScreenplayID: uuidToPgtype(screenplayID),
 		UserID:       uuidToPgtype(userID),
 	})
+}
+
+func (r *screenplayRepository) GetScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	k, err := r.queries.GetScreenplayAccessKeyByScreenplayAndUser(ctx, generated.GetScreenplayAccessKeyByScreenplayAndUserParams{
+		ScreenplayID: uuidToPgtype(screenplayID),
+		UserID:       uuidToPgtype(userID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, model.ErrScreenplayKeyNotFound
+		}
+		return nil, err
+	}
+
+	var grantedBy *uuid.UUID
+	if k.GrantedBy.Valid {
+		id := uuid.UUID(k.GrantedBy.Bytes)
+		grantedBy = &id
+	}
+
+	var ephPub *string
+	if k.EphemeralPublicKey != "" {
+		ephPub = &k.EphemeralPublicKey
+	}
+
+	return &model.ScreenplayAccessKeyResponse{
+		ID:                 pgtypeToUUID(k.ID),
+		ScreenplayID:       pgtypeToUUID(k.ScreenplayID),
+		UserID:             pgtypeToUUID(k.UserID),
+		Role:               k.Role,
+		EphemeralPublicKey: ephPub,
+		KeyIV:              k.KeyIv,
+		WrappedKey:         k.WrappedKey,
+		Version:            int(k.Version),
+		Algorithm:          k.Algorithm,
+		GrantedBy:          grantedBy,
+		CreatedAt:          pgtypeToTime(k.CreatedAt),
+		UpdatedAt:          pgtypeToTime(k.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) UpsertScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	role := req.Role
+	if role == "" {
+		role = "editor"
+	}
+	algo := req.Algorithm
+	if algo == "" {
+		algo = "ECIES-P256-AES-GCM"
+	}
+	version := req.Version
+	if version == 0 {
+		version = model.ExpectedEncryptionVersion
+	}
+
+	var gb pgtype.UUID
+	if grantedBy != nil {
+		gb = uuidToPgtype(*grantedBy)
+	}
+
+	eph := ""
+	if req.EphemeralPublicKey != nil {
+		eph = *req.EphemeralPublicKey
+	}
+
+	k, err := r.queries.UpsertScreenplayAccessKey(ctx, generated.UpsertScreenplayAccessKeyParams{
+		ScreenplayID:       uuidToPgtype(screenplayID),
+		UserID:             uuidToPgtype(userID),
+		WrappedKey:         req.WrappedKey,
+		KeyIv:              req.KeyIV,
+		EphemeralPublicKey: eph,
+		Algorithm:          algo,
+		Version:            int32(version),
+		Role:               role,
+		GrantedBy:          gb,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var gByID *uuid.UUID
+	if k.GrantedBy.Valid {
+		id := uuid.UUID(k.GrantedBy.Bytes)
+		gByID = &id
+	}
+
+	var ephRet *string
+	if k.EphemeralPublicKey != "" {
+		ephRet = &k.EphemeralPublicKey
+	}
+
+	return &model.ScreenplayAccessKeyResponse{
+		ID:                 pgtypeToUUID(k.ID),
+		ScreenplayID:       pgtypeToUUID(k.ScreenplayID),
+		UserID:             pgtypeToUUID(k.UserID),
+		Role:               k.Role,
+		EphemeralPublicKey: ephRet,
+		KeyIV:              k.KeyIv,
+		WrappedKey:         k.WrappedKey,
+		Version:            int(k.Version),
+		Algorithm:          k.Algorithm,
+		GrantedBy:          gByID,
+		CreatedAt:          pgtypeToTime(k.CreatedAt),
+		UpdatedAt:          pgtypeToTime(k.UpdatedAt),
+	}, nil
+}
+
+func (r *screenplayRepository) DeleteScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) error {
+	return r.queries.DeleteScreenplayAccessKey(ctx, generated.DeleteScreenplayAccessKeyParams{
+		ScreenplayID: uuidToPgtype(screenplayID),
+		UserID:       uuidToPgtype(userID),
+	})
+}
+
+func (r *screenplayRepository) ListScreenplayAccessKeys(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayAccessKeyResponse, error) {
+	rows, err := r.queries.ListScreenplayAccessKeysByScreenplay(ctx, uuidToPgtype(screenplayID))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]model.ScreenplayAccessKeyResponse, 0, len(rows))
+	for _, k := range rows {
+		var grantedBy *uuid.UUID
+		if k.GrantedBy.Valid {
+			id := uuid.UUID(k.GrantedBy.Bytes)
+			grantedBy = &id
+		}
+		result = append(result, model.ScreenplayAccessKeyResponse{
+			ID:           pgtypeToUUID(k.ID),
+			ScreenplayID: pgtypeToUUID(k.ScreenplayID),
+			UserID:       pgtypeToUUID(k.UserID),
+			Role:         k.Role,
+			GrantedBy:    grantedBy,
+			CreatedAt:    pgtypeToTime(k.CreatedAt),
+			UpdatedAt:    pgtypeToTime(k.UpdatedAt),
+		})
+	}
+	return result, nil
+}
+
+func (r *screenplayRepository) ListCollaboratorsByScreenplayID(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error) {
+	rows, err := r.queries.ListScreenplayAccessKeysByScreenplay(ctx, uuidToPgtype(screenplayID))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]model.ScreenplayCollaboratorResponse, 0, len(rows))
+	for _, c := range rows {
+		var grantedBy *uuid.UUID
+		if c.GrantedBy.Valid {
+			id := uuid.UUID(c.GrantedBy.Bytes)
+			grantedBy = &id
+		}
+		result = append(result, model.ScreenplayCollaboratorResponse{
+			UserID:    pgtypeToUUID(c.UserID),
+			Email:     c.UserEmail,
+			Name:      c.UserName,
+			Role:      c.Role,
+			GrantedBy: grantedBy,
+			CreatedAt: pgtypeToTime(c.CreatedAt),
+			UpdatedAt: pgtypeToTime(c.UpdatedAt),
+		})
+	}
+	return result, nil
 }
 
 // Screenplay CRUD
@@ -381,24 +727,29 @@ func (r *screenplayRepository) CreateScreenplay(
 	// 2. Insert Screenplay Content
 	contentParams := generated.CreateScreenplayContentParams{
 		ScreenplayID:      screenplay.ID,
-		Content:           initialContent,
 		Revision:          1,
-		IsEncrypted:       false,
 		EncryptionVersion: 1,
 		Algorithm:         "AES-GCM",
 		Iv:                "",
 		Ciphertext:        "",
 	}
 
-	var detailContent interface{} = initialContent
+	detailContent := &model.EncryptedPayload{
+		Version:   1,
+		Algorithm: "AES-GCM",
+	}
 	if encPayload != nil {
-		contentParams.IsEncrypted = true
 		contentParams.EncryptionVersion = int32(encPayload.Version)
 		contentParams.Algorithm = encPayload.Algorithm
 		contentParams.Iv = encPayload.IV
 		contentParams.Ciphertext = encPayload.Ciphertext
-		contentParams.Content = ""
 		detailContent = encPayload
+	} else if parsed, ok := model.ParseEncryptedPayloadString(initialContent); ok {
+		contentParams.EncryptionVersion = int32(parsed.Version)
+		contentParams.Algorithm = parsed.Algorithm
+		contentParams.Iv = parsed.IV
+		contentParams.Ciphertext = parsed.Ciphertext
+		detailContent = parsed
 	}
 
 	content, err := qtx.CreateScreenplayContent(ctx, contentParams)
@@ -408,13 +759,16 @@ func (r *screenplayRepository) CreateScreenplay(
 
 	// 3. If wrapped key provided, insert screenplay key
 	if wrappedKey != nil {
-		_, err = qtx.UpsertScreenplayKey(ctx, generated.UpsertScreenplayKeyParams{
-			ScreenplayID: screenplay.ID,
-			UserID:       uuidToPgtype(userID),
-			WrappedKey:   wrappedKey.WrappedKey,
-			KeyIv:        wrappedKey.IV,
-			Algorithm:    wrappedKey.Algorithm,
-			Version:      int32(wrappedKey.Version),
+		_, err = qtx.UpsertScreenplayAccessKey(ctx, generated.UpsertScreenplayAccessKeyParams{
+			ScreenplayID:       screenplay.ID,
+			UserID:             uuidToPgtype(userID),
+			Role:               "owner",
+			EphemeralPublicKey: "",
+			KeyIv:              wrappedKey.IV,
+			WrappedKey:         wrappedKey.WrappedKey,
+			Version:            int32(wrappedKey.Version),
+			Algorithm:          wrappedKey.Algorithm,
+			GrantedBy:          uuidToPgtype(userID),
 		})
 		if err != nil {
 			return nil, err
@@ -429,7 +783,7 @@ func (r *screenplayRepository) CreateScreenplay(
 		ScreenplayResponse: toScreenplayResponse(screenplay.ID, screenplay.ProjectID, screenplay.Title, screenplay.Description, screenplay.IsDefault, screenplay.SortOrder, screenplay.WordCount, screenplay.PageCount, screenplay.SceneCount, screenplay.CreatedAt, screenplay.UpdatedAt),
 		Content:            detailContent,
 		Revision:           content.Revision,
-		IsEncrypted:        content.IsEncrypted,
+		IsEncrypted:        true,
 		EncryptionVersion:  int(content.EncryptionVersion),
 		Algorithm:          content.Algorithm,
 		IV:                 content.Iv,
@@ -566,21 +920,18 @@ func (r *screenplayRepository) GetContent(ctx context.Context, screenplayID uuid
 		return nil, err
 	}
 
-	var content interface{} = c.Content
-	if c.IsEncrypted {
-		content = &model.EncryptedPayload{
-			Version:    int(c.EncryptionVersion),
-			Algorithm:  c.Algorithm,
-			IV:         c.Iv,
-			Ciphertext: c.Ciphertext,
-		}
+	payload := &model.EncryptedPayload{
+		Version:    int(c.EncryptionVersion),
+		Algorithm:  c.Algorithm,
+		IV:         c.Iv,
+		Ciphertext: c.Ciphertext,
 	}
 
 	return &model.ScreenplayContentResponse{
 		ScreenplayID:      pgtypeToUUID(c.ScreenplayID),
-		Content:           content,
+		Content:           payload,
 		Revision:          c.Revision,
-		IsEncrypted:       c.IsEncrypted,
+		IsEncrypted:       true,
 		EncryptionVersion: int(c.EncryptionVersion),
 		Algorithm:         c.Algorithm,
 		IV:                c.Iv,
@@ -590,29 +941,16 @@ func (r *screenplayRepository) GetContent(ctx context.Context, screenplayID uuid
 }
 
 func (r *screenplayRepository) SaveContentWithRevision(ctx context.Context, screenplayID uuid.UUID, content string, revision int64) (*model.ScreenplayContentResponse, error) {
-	c, err := r.queries.UpdateScreenplayContentWithRevision(ctx, generated.UpdateScreenplayContentWithRevisionParams{
-		ScreenplayID: uuidToPgtype(screenplayID),
-		Revision:     revision,
-		Content:      content,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, model.ErrRevisionConflict
+	payload, ok := model.ParseEncryptedPayloadString(content)
+	if !ok {
+		payload = &model.EncryptedPayload{
+			Version:    1,
+			Algorithm:  "AES-GCM",
+			IV:         base64.StdEncoding.EncodeToString(make([]byte, 12)),
+			Ciphertext: content,
 		}
-		return nil, err
 	}
-
-	return &model.ScreenplayContentResponse{
-		ScreenplayID:      pgtypeToUUID(c.ScreenplayID),
-		Content:           c.Content,
-		Revision:          c.Revision,
-		IsEncrypted:       c.IsEncrypted,
-		EncryptionVersion: int(c.EncryptionVersion),
-		Algorithm:         c.Algorithm,
-		IV:                c.Iv,
-		Ciphertext:        c.Ciphertext,
-		UpdatedAt:         pgtypeToTime(c.UpdatedAt),
-	}, nil
+	return r.SaveEncryptedContentWithRevision(ctx, screenplayID, *payload, revision)
 }
 
 func (r *screenplayRepository) SaveEncryptedContentWithRevision(ctx context.Context, screenplayID uuid.UUID, payload model.EncryptedPayload, revision int64) (*model.ScreenplayContentResponse, error) {
@@ -675,8 +1013,6 @@ func (r *screenplayRepository) CreateVersion(
 		ScreenplayID:      uuidToPgtype(screenplayID),
 		VersionNumber:     newVersionNumber,
 		Title:             title,
-		Content:           content,
-		IsEncrypted:       false,
 		EncryptionVersion: 1,
 		Algorithm:         "AES-GCM",
 		Iv:                "",
@@ -687,12 +1023,17 @@ func (r *screenplayRepository) CreateVersion(
 	}
 
 	if encPayload != nil {
-		params.IsEncrypted = true
 		params.EncryptionVersion = int32(encPayload.Version)
 		params.Algorithm = encPayload.Algorithm
 		params.Iv = encPayload.IV
 		params.Ciphertext = encPayload.Ciphertext
-		params.Content = ""
+	} else if parsed, ok := model.ParseEncryptedPayloadString(content); ok {
+		params.EncryptionVersion = int32(parsed.Version)
+		params.Algorithm = parsed.Algorithm
+		params.Iv = parsed.IV
+		params.Ciphertext = parsed.Ciphertext
+	} else {
+		params.Ciphertext = content
 	}
 
 	v, err := r.queries.CreateScreenplayVersion(ctx, params)
@@ -755,8 +1096,6 @@ func (r *screenplayRepository) RestoreVersion(ctx context.Context, screenplayID,
 	// 2. Force Update Screenplay Content
 	updatedContent, err := qtx.ForceSetScreenplayContent(ctx, generated.ForceSetScreenplayContentParams{
 		ScreenplayID:      uuidToPgtype(screenplayID),
-		Content:           v.Content,
-		IsEncrypted:       v.IsEncrypted,
 		EncryptionVersion: v.EncryptionVersion,
 		Algorithm:         v.Algorithm,
 		Iv:                v.Iv,
@@ -779,9 +1118,7 @@ func (r *screenplayRepository) RestoreVersion(ctx context.Context, screenplayID,
 		ScreenplayID:      uuidToPgtype(screenplayID),
 		VersionNumber:     newVersionNum,
 		Title:             restoreTitle,
-		Content:           v.Content,
 		CreatedBy:         uuidToPgtype(userID),
-		IsEncrypted:       v.IsEncrypted,
 		EncryptionVersion: v.EncryptionVersion,
 		Algorithm:         v.Algorithm,
 		Iv:                v.Iv,
@@ -795,14 +1132,11 @@ func (r *screenplayRepository) RestoreVersion(ctx context.Context, screenplayID,
 		return nil, fmt.Errorf("failed to commit tx: %w", err)
 	}
 
-	var content interface{} = updatedContent.Content
-	if updatedContent.IsEncrypted {
-		content = &model.EncryptedPayload{
-			Version:    int(updatedContent.EncryptionVersion),
-			Algorithm:  updatedContent.Algorithm,
-			IV:         updatedContent.Iv,
-			Ciphertext: updatedContent.Ciphertext,
-		}
+	content := &model.EncryptedPayload{
+		Version:    int(updatedContent.EncryptionVersion),
+		Algorithm:  updatedContent.Algorithm,
+		IV:         updatedContent.Iv,
+		Ciphertext: updatedContent.Ciphertext,
 	}
 
 	return &model.RestoreVersionResponse{
@@ -810,7 +1144,7 @@ func (r *screenplayRepository) RestoreVersion(ctx context.Context, screenplayID,
 		RestoredFromID: versionID,
 		NewRevision:    updatedContent.Revision,
 		Content:        content,
-		IsEncrypted:    updatedContent.IsEncrypted,
+		IsEncrypted:    true,
 		RestoreVersion: toCreateVersionResponse(restoreVer),
 	}, nil
 }

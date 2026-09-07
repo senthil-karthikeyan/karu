@@ -216,6 +216,71 @@ func (m *mockScreenplayRepo) DeleteScreenplayKey(ctx context.Context, screenplay
 	return nil
 }
 
+func (m *mockScreenplayRepo) GetUserEncryptionKeys(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error) {
+	return nil, model.ErrNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertUserEncryptionKeys(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error) {
+	return &model.UserEncryptionKeysResponse{
+		UserID:        userID,
+		Salt:          req.Salt,
+		Iterations:    req.Iterations,
+		HashAlgorithm: req.HashAlgorithm,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) GetUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error) {
+	return nil, model.ErrNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertUserRecoveryCredential(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error) {
+	return &model.UserRecoveryCredentialResponse{
+		UserID:         userID,
+		CredentialType: req.CredentialType,
+		Salt:           req.Salt,
+		Iterations:     req.Iterations,
+		HashAlgorithm:  req.HashAlgorithm,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) DeleteUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) error {
+	return nil
+}
+
+func (m *mockScreenplayRepo) GetScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	return nil, model.ErrScreenplayKeyNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	return &model.ScreenplayAccessKeyResponse{
+		ScreenplayID: screenplayID,
+		UserID:       userID,
+		Role:         req.Role,
+		KeyIV:        req.KeyIV,
+		WrappedKey:   req.WrappedKey,
+		Version:      req.Version,
+		Algorithm:    req.Algorithm,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) DeleteScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) error {
+	return nil
+}
+
+func (m *mockScreenplayRepo) ListScreenplayAccessKeys(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayAccessKeyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockScreenplayRepo) ListCollaboratorsByScreenplayID(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error) {
+	return nil, nil
+}
+
 func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error) {
 	if m.createScreenplayFunc != nil {
 		return m.createScreenplayFunc(ctx, projectID, title, description, initialContent, encPayload, wrappedKey, userID, wordCount, pageCount, sceneCount)
