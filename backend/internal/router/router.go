@@ -62,6 +62,12 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 			// Goth Google OAuth
 			authGroup.GET("/google", deps.AuthHandler.BeginGoogleAuth)
 			authGroup.GET("/google/callback", deps.AuthHandler.GoogleCallback)
+
+			// Recovery endpoints (unauthenticated)
+			if deps.UserHandler != nil {
+				authGroup.POST("/recovery/lookup", deps.UserHandler.RecoveryLookup)
+				authGroup.POST("/recovery/reset", deps.UserHandler.RecoveryReset)
+			}
 		}
 
 		// Protected routes
@@ -73,10 +79,15 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 			{
 				users.GET("/me", deps.UserHandler.GetMe)
 				users.PATCH("/me", deps.UserHandler.UpdateMe)
+				users.GET("/lookup", deps.UserHandler.LookupUserByEmail)
 				users.GET("/me/encryption-metadata", deps.UserHandler.GetEncryptionMetadata)
 				users.POST("/me/encryption-metadata", deps.UserHandler.SetEncryptionMetadata)
 				users.GET("/me/encryption-identity", deps.UserHandler.GetEncryptionIdentity)
 				users.POST("/me/encryption-identity", deps.UserHandler.SetEncryptionIdentity)
+				users.GET("/me/encryption-keys", deps.UserHandler.GetEncryptionKeys)
+				users.POST("/me/encryption-keys", deps.UserHandler.SetEncryptionKeys)
+				users.GET("/me/recovery-credentials", deps.UserHandler.GetRecoveryCredentials)
+				users.POST("/me/recovery-credentials", deps.UserHandler.SetRecoveryCredentials)
 				users.GET("/:id/public-key", deps.UserHandler.GetUserPublicKey)
 			}
 
@@ -117,6 +128,9 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 					// Screenplay Key Management (E2EE)
 					screenplays.GET("/:id/key", deps.ScreenplayHandler.GetScreenplayKey)
 					screenplays.POST("/:id/key", deps.ScreenplayHandler.SetScreenplayKey)
+					screenplays.POST("/:id/shares", deps.ScreenplayHandler.ShareScreenplay)
+					screenplays.GET("/:id/collaborators", deps.ScreenplayHandler.ListCollaborators)
+					screenplays.DELETE("/:id/collaborators/:userId", deps.ScreenplayHandler.RevokeCollaborator)
 
 					// Screenplay Content & Autosave
 					screenplays.GET("/:id/content", deps.ScreenplayHandler.GetContent)

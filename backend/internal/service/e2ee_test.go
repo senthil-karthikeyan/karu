@@ -320,17 +320,15 @@ func TestEncryptedScreenplayContentAutosaveAndOptimisticConcurrency(t *testing.T
 		t.Errorf("expected revision 7 and isEncrypted=true, got revision %d, isEncrypted=%v", saveRawResp.Revision, saveRawResp.IsEncrypted)
 	}
 
-	// 4. Legacy plaintext backward compatibility
-	plainResp, err := svc.SaveContent(ctx, screenplayID, ownerID, model.SaveContentRequest{
+	// 4. Plaintext content is strictly rejected (no plaintext fallback allowed in target E2EE schema)
+	_, err = svc.SaveContent(ctx, screenplayID, ownerID, model.SaveContentRequest{
 		Content:  json.RawMessage(`"<h2 data-type=\"scene-heading\">1. INT. OPENING SCENE - DAY</h2>"`),
 		Revision: 7,
 	})
-	if err != nil {
-		t.Fatalf("unexpected error saving legacy plaintext content: %v", err)
+	if err == nil || !errors.Is(err, model.ErrBadRequest) {
+		t.Fatalf("expected ErrBadRequest for plaintext content, got: %v", err)
 	}
-	if plainResp.Revision != 8 || plainResp.IsEncrypted {
-		t.Errorf("expected revision 8 and isEncrypted=false, got revision %d, isEncrypted=%v", plainResp.Revision, plainResp.IsEncrypted)
-	}
+
 
 	// 5. Zero-knowledge verification: Ciphertext remains unchanged
 	if saveResp.Ciphertext != validCiphertext {

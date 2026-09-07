@@ -392,3 +392,84 @@ func (h *ScreenplayHandler) RestoreVersion(c *gin.Context) {
 
 	model.SendSuccess(c, http.StatusOK, restored)
 }
+
+// ShareScreenplay shares a screenplay with a collaborator by storing their wrapped access key.
+func (h *ScreenplayHandler) ShareScreenplay(c *gin.Context) {
+	callerID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	screenplayID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	var req model.ShareScreenplayRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		model.SendError(c, model.ErrBadRequest)
+		return
+	}
+
+	res, err := h.screenplayService.ShareScreenplay(c.Request.Context(), screenplayID, callerID, req)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, res)
+}
+
+// ListCollaborators returns the list of collaborators on a screenplay.
+func (h *ScreenplayHandler) ListCollaborators(c *gin.Context) {
+	callerID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	screenplayID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	collaborators, err := h.screenplayService.ListCollaborators(c.Request.Context(), screenplayID, callerID)
+	if err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, collaborators)
+}
+
+// RevokeCollaborator revokes a collaborator's access to a screenplay.
+func (h *ScreenplayHandler) RevokeCollaborator(c *gin.Context) {
+	callerID, err := middleware.GetUserID(c)
+	if err != nil {
+		model.SendError(c, model.ErrUnauthorized)
+		return
+	}
+
+	screenplayID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	targetUserID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		model.SendError(c, model.ErrNotFound)
+		return
+	}
+
+	if err := h.screenplayService.RevokeCollaborator(c.Request.Context(), screenplayID, callerID, targetUserID); err != nil {
+		model.SendError(c, err)
+		return
+	}
+
+	model.SendSuccess(c, http.StatusOK, gin.H{"message": "collaborator access revoked successfully"})
+}
+

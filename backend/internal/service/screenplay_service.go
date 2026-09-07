@@ -25,9 +25,12 @@ type ScreenplayService interface {
 	GetContent(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayContentResponse, error)
 	SaveContent(ctx context.Context, screenplayID, userID uuid.UUID, req model.SaveContentRequest) (*model.ScreenplayContentResponse, error)
 
-	// Screenplay Keys
+	// Screenplay Keys & Sharing
 	GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error)
 	SetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error)
+	ShareScreenplay(ctx context.Context, screenplayID, callerID uuid.UUID, req model.ShareScreenplayRequest) (*model.ScreenplayAccessKeyResponse, error)
+	ListCollaborators(ctx context.Context, screenplayID, callerID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error)
+	RevokeCollaborator(ctx context.Context, screenplayID, callerID, targetUserID uuid.UUID) error
 
 	// Versions & Restore
 	CreateVersion(ctx context.Context, screenplayID, userID uuid.UUID, req model.CreateVersionRequest) (*model.ScreenplayVersionResponse, error)
@@ -80,9 +83,89 @@ func (s *screenplayService) CreateScreenplay(ctx context.Context, projectID, use
 	return s.screenplayRepo.CreateScreenplay(ctx, projectID, title, req.Description, initialContent, req.EncryptedPayload, req.WrappedKey, userID, req.WordCount, req.PageCount, req.SceneCount)
 }
 
+func (s *screenplayService) verifyAccess(ctx context.Context, screenplayID, userID uuid.UUID, requiredRole string) error {
+	// 1. Direct project owner check (via screenplay -> project)
+	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
+	if err == nil {
+		// Project owner has full permissions
+		return nil
+	}
+
+	// 1b. Check if screenplayID is directly a project ID owned by the user (legacy compatibility)
+	if _, pErr := s.projectRepo.GetByIDAndUserID(ctx, screenplayID, userID); pErr == nil {
+		return nil
+	}
+
+	// 2. Collaborator check via screenplay_access_keys
+	accessKey, err := s.screenplayRepo.GetScreenplayAccessKey(ctx, screenplayID, userID)
+	if err != nil {
+		if errors.Is(err, model.ErrScreenplayKeyNotFound) || errors.Is(err, model.ErrNotFound) {
+			return model.ErrNotFound
+		}
+		return err
+	}
+
+	switch requiredRole {
+	case "owner":
+		if accessKey.Role == "owner" {
+			return nil
+		}
+	case "editor":
+		if accessKey.Role == "owner" || accessKey.Role == "editor" {
+			return nil
+		}
+	case "viewer", "":
+		if accessKey.Role == "owner" || accessKey.Role == "editor" || accessKey.Role == "viewer" {
+			return nil
+		}
+	}
+
+	return model.ErrUnauthorized
+}
+
+func (s *screenplayService) verifyOwnership(ctx context.Context, id, userID uuid.UUID) error {
+	return s.verifyAccess(ctx, id, userID, "owner")
+}
+
 func (s *screenplayService) GetScreenplay(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
-	// Verify ownership
+	// 1. First check direct ownership (owner path)
 	row, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
+	if err == nil {
+		content, err := s.screenplayRepo.GetContent(ctx, screenplayID)
+		if err != nil {
+			return nil, err
+		}
+
+		return &model.ScreenplayDetailResponse{
+			ScreenplayResponse: model.ScreenplayResponse{
+				ID:          screenplayID,
+				ProjectID:   uuid.UUID(row.ProjectID.Bytes),
+				Title:       row.Title,
+				Description: row.Description,
+				IsDefault:   row.IsDefault,
+				SortOrder:   int(row.SortOrder),
+				WordCount:   int(row.WordCount),
+				PageCount:   int(row.PageCount),
+				SceneCount:  int(row.SceneCount),
+				CreatedAt:   row.CreatedAt.Time,
+				UpdatedAt:   row.UpdatedAt.Time,
+			},
+			Content:           content.Content,
+			Revision:          content.Revision,
+			IsEncrypted:       content.IsEncrypted,
+			EncryptionVersion: content.EncryptionVersion,
+			Algorithm:         content.Algorithm,
+			IV:                content.IV,
+			Ciphertext:        content.Ciphertext,
+		}, nil
+	}
+
+	// 2. Collaborator path: verify viewer access via screenplay_access_keys
+	if vErr := s.verifyAccess(ctx, screenplayID, userID, "viewer"); vErr != nil {
+		return nil, vErr
+	}
+
+	sp, err := s.screenplayRepo.GetScreenplay(ctx, screenplayID)
 	if err != nil {
 		return nil, err
 	}
@@ -95,16 +178,16 @@ func (s *screenplayService) GetScreenplay(ctx context.Context, screenplayID, use
 	return &model.ScreenplayDetailResponse{
 		ScreenplayResponse: model.ScreenplayResponse{
 			ID:          screenplayID,
-			ProjectID:   uuid.UUID(row.ProjectID.Bytes),
-			Title:       row.Title,
-			Description: row.Description,
-			IsDefault:   row.IsDefault,
-			SortOrder:   int(row.SortOrder),
-			WordCount:   int(row.WordCount),
-			PageCount:   int(row.PageCount),
-			SceneCount:  int(row.SceneCount),
-			CreatedAt:   row.CreatedAt.Time,
-			UpdatedAt:   row.UpdatedAt.Time,
+			ProjectID:   uuid.UUID(sp.ProjectID.Bytes),
+			Title:       sp.Title,
+			Description: sp.Description,
+			IsDefault:   sp.IsDefault,
+			SortOrder:   int(sp.SortOrder),
+			WordCount:   int(sp.WordCount),
+			PageCount:   int(sp.PageCount),
+			SceneCount:  int(sp.SceneCount),
+			CreatedAt:   sp.CreatedAt.Time,
+			UpdatedAt:   sp.UpdatedAt.Time,
 		},
 		Content:           content.Content,
 		Revision:          content.Revision,
@@ -115,6 +198,7 @@ func (s *screenplayService) GetScreenplay(ctx context.Context, screenplayID, use
 		Ciphertext:        content.Ciphertext,
 	}, nil
 }
+
 
 func (s *screenplayService) GetProjectDefaultScreenplay(ctx context.Context, projectID, userID uuid.UUID) (*model.ScreenplayDetailResponse, error) {
 	proj, err := s.projectRepo.GetByIDAndUserID(ctx, projectID, userID)
@@ -176,9 +260,7 @@ func (s *screenplayService) ListScreenplays(ctx context.Context, projectID, user
 }
 
 func (s *screenplayService) UpdateScreenplay(ctx context.Context, screenplayID, userID uuid.UUID, req model.UpdateScreenplayRequest) (*model.ScreenplayResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "editor"); err != nil {
 		return nil, err
 	}
 
@@ -186,9 +268,7 @@ func (s *screenplayService) UpdateScreenplay(ctx context.Context, screenplayID, 
 }
 
 func (s *screenplayService) DeleteScreenplay(ctx context.Context, screenplayID, userID uuid.UUID) error {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "owner"); err != nil {
 		return err
 	}
 
@@ -196,9 +276,7 @@ func (s *screenplayService) DeleteScreenplay(ctx context.Context, screenplayID, 
 }
 
 func (s *screenplayService) GetContent(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayContentResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "viewer"); err != nil {
 		return nil, err
 	}
 
@@ -206,9 +284,7 @@ func (s *screenplayService) GetContent(ctx context.Context, screenplayID, userID
 }
 
 func (s *screenplayService) SaveContent(ctx context.Context, screenplayID, userID uuid.UUID, req model.SaveContentRequest) (*model.ScreenplayContentResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "editor"); err != nil {
 		return nil, err
 	}
 
@@ -229,8 +305,7 @@ func (s *screenplayService) SaveContent(ctx context.Context, screenplayID, userI
 		}
 		resp = res
 	} else if len(req.Content) > 0 {
-		// 2. Check if req.Content is provided
-		// Check if Content is an EncryptedPayload JSON object
+		// 2. Check if req.Content is provided as EncryptedPayload JSON object
 		var encPayload model.EncryptedPayload
 		if err := json.Unmarshal(req.Content, &encPayload); err == nil && encPayload.Version > 0 && encPayload.Algorithm != "" && encPayload.IV != "" && encPayload.Ciphertext != "" {
 			if err := model.ValidateEncryptedPayload(encPayload); err != nil {
@@ -256,20 +331,10 @@ func (s *screenplayService) SaveContent(ctx context.Context, screenplayID, userI
 					}
 					resp = res
 				} else {
-					// Plaintext string
-					res, err := s.screenplayRepo.SaveContentWithRevision(ctx, screenplayID, strVal, req.Revision)
-					if err != nil {
-						return nil, err
-					}
-					resp = res
+					return nil, fmt.Errorf("%w: plaintext content is not allowed; all screenplay content must be encrypted", model.ErrBadRequest)
 				}
 			} else {
-				// Plaintext raw representation
-				res, err := s.screenplayRepo.SaveContentWithRevision(ctx, screenplayID, string(req.Content), req.Revision)
-				if err != nil {
-					return nil, err
-				}
-				resp = res
+				return nil, fmt.Errorf("%w: plaintext content is not allowed; all screenplay content must be encrypted", model.ErrBadRequest)
 			}
 		}
 	} else {
@@ -294,21 +359,8 @@ func (s *screenplayService) SaveContent(ctx context.Context, screenplayID, userI
 	return resp, nil
 }
 
-func (s *screenplayService) verifyOwnership(ctx context.Context, id, userID uuid.UUID) error {
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, id, userID)
-	if err == nil {
-		return nil
-	}
-	_, pErr := s.projectRepo.GetByIDAndUserID(ctx, id, userID)
-	if pErr == nil {
-		return nil
-	}
-	return err
-}
-
 func (s *screenplayService) GetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayKeyResponse, error) {
-	// Verify ownership against screenplay or project
-	if err := s.verifyOwnership(ctx, screenplayID, userID); err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "viewer"); err != nil {
 		return nil, err
 	}
 
@@ -316,8 +368,7 @@ func (s *screenplayService) GetScreenplayKey(ctx context.Context, screenplayID, 
 }
 
 func (s *screenplayService) SetScreenplayKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.WrappedKeyPayload) (*model.ScreenplayKeyResponse, error) {
-	// Verify ownership against screenplay or project
-	if err := s.verifyOwnership(ctx, screenplayID, userID); err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "owner"); err != nil {
 		return nil, err
 	}
 
@@ -328,10 +379,59 @@ func (s *screenplayService) SetScreenplayKey(ctx context.Context, screenplayID, 
 	return s.screenplayRepo.UpsertScreenplayKey(ctx, screenplayID, userID, req.WrappedKey, req.IV, req.Algorithm, req.Version)
 }
 
+func (s *screenplayService) ShareScreenplay(ctx context.Context, screenplayID, callerID uuid.UUID, req model.ShareScreenplayRequest) (*model.ScreenplayAccessKeyResponse, error) {
+	if err := s.verifyAccess(ctx, screenplayID, callerID, "owner"); err != nil {
+		return nil, err
+	}
+
+	if req.RecipientUserID == callerID {
+		return nil, fmt.Errorf("%w: cannot share screenplay with yourself", model.ErrBadRequest)
+	}
+
+	if req.Role != "editor" && req.Role != "viewer" {
+		return nil, fmt.Errorf("%w: role must be 'editor' or 'viewer'", model.ErrBadRequest)
+	}
+
+	if req.WrappedKey == "" || req.KeyIV == "" || req.EphemeralPublicKey == "" {
+		return nil, fmt.Errorf("%w: wrappedKey, keyIv, and ephemeralPublicKey are required", model.ErrBadRequest)
+	}
+
+	accessKeyReq := model.ScreenplayAccessKeyRequest{
+		ScreenplayID:       screenplayID,
+		UserID:             req.RecipientUserID,
+		Role:               req.Role,
+		EphemeralPublicKey: &req.EphemeralPublicKey,
+		KeyIV:              req.KeyIV,
+		WrappedKey:         req.WrappedKey,
+		Version:            req.Version,
+		Algorithm:          req.Algorithm,
+	}
+
+	return s.screenplayRepo.UpsertScreenplayAccessKey(ctx, screenplayID, req.RecipientUserID, accessKeyReq, &callerID)
+}
+
+func (s *screenplayService) ListCollaborators(ctx context.Context, screenplayID, callerID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error) {
+	if err := s.verifyAccess(ctx, screenplayID, callerID, "viewer"); err != nil {
+		return nil, err
+	}
+
+	return s.screenplayRepo.ListCollaboratorsByScreenplayID(ctx, screenplayID)
+}
+
+func (s *screenplayService) RevokeCollaborator(ctx context.Context, screenplayID, callerID, targetUserID uuid.UUID) error {
+	if err := s.verifyAccess(ctx, screenplayID, callerID, "owner"); err != nil {
+		return err
+	}
+
+	if callerID == targetUserID {
+		return fmt.Errorf("%w: cannot revoke access from project owner", model.ErrBadRequest)
+	}
+
+	return s.screenplayRepo.DeleteScreenplayAccessKey(ctx, screenplayID, targetUserID)
+}
+
 func (s *screenplayService) CreateVersion(ctx context.Context, screenplayID, userID uuid.UUID, req model.CreateVersionRequest) (*model.ScreenplayVersionResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "editor"); err != nil {
 		return nil, err
 	}
 
@@ -354,7 +454,7 @@ func (s *screenplayService) CreateVersion(ctx context.Context, screenplayID, use
 			return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", &nestedEnc, &userID)
 		}
 
-		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, *req.Content, nil, &userID)
+		return nil, fmt.Errorf("%w: plaintext version content is not allowed; content must be encrypted", model.ErrBadRequest)
 	}
 
 	// Snapshot from active content
@@ -363,32 +463,25 @@ func (s *screenplayService) CreateVersion(ctx context.Context, screenplayID, use
 		return nil, err
 	}
 
-	if activeContent.IsEncrypted {
-		if enc, ok := activeContent.Content.(*model.EncryptedPayload); ok && enc != nil {
-			return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", enc, &userID)
-		}
-		// Stringified or raw content
-		rawStr, _ := json.Marshal(activeContent.Content)
-		var enc model.EncryptedPayload
-		if err := json.Unmarshal(rawStr, &enc); err == nil && enc.Ciphertext != "" {
-			return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", &enc, &userID)
-		}
-		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", &model.EncryptedPayload{
-			Version:    activeContent.EncryptionVersion,
-			Algorithm:  activeContent.Algorithm,
-			IV:         activeContent.IV,
-			Ciphertext: activeContent.Ciphertext,
-		}, &userID)
+	if enc, ok := activeContent.Content.(*model.EncryptedPayload); ok && enc != nil {
+		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", enc, &userID)
 	}
-
-	rawContentStr := fmt.Sprintf("%v", activeContent.Content)
-	return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, rawContentStr, nil, &userID)
+	// Stringified or raw content
+	rawStr, _ := json.Marshal(activeContent.Content)
+	var enc model.EncryptedPayload
+	if err := json.Unmarshal(rawStr, &enc); err == nil && enc.Ciphertext != "" {
+		return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", &enc, &userID)
+	}
+	return s.screenplayRepo.CreateVersion(ctx, screenplayID, req.Title, "", &model.EncryptedPayload{
+		Version:    activeContent.EncryptionVersion,
+		Algorithm:  activeContent.Algorithm,
+		IV:         activeContent.IV,
+		Ciphertext: activeContent.Ciphertext,
+	}, &userID)
 }
 
 func (s *screenplayService) ListVersions(ctx context.Context, screenplayID, userID uuid.UUID) ([]model.ScreenplayVersionResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "viewer"); err != nil {
 		return nil, err
 	}
 
@@ -396,9 +489,7 @@ func (s *screenplayService) ListVersions(ctx context.Context, screenplayID, user
 }
 
 func (s *screenplayService) GetVersion(ctx context.Context, screenplayID, versionID, userID uuid.UUID) (*model.ScreenplayVersionResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "viewer"); err != nil {
 		return nil, err
 	}
 
@@ -413,9 +504,7 @@ func (s *screenplayService) GetVersion(ctx context.Context, screenplayID, versio
 }
 
 func (s *screenplayService) RestoreVersion(ctx context.Context, screenplayID, versionID, userID uuid.UUID) (*model.RestoreVersionResponse, error) {
-	// Verify ownership
-	_, err := s.screenplayRepo.GetScreenplayWithOwnership(ctx, screenplayID, userID)
-	if err != nil {
+	if err := s.verifyAccess(ctx, screenplayID, userID, "editor"); err != nil {
 		return nil, err
 	}
 

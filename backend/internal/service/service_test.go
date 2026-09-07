@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -660,6 +659,22 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 				Revision:     currentRevision,
 			}, nil
 		},
+		saveEncryptedContent: func(ctx context.Context, sID uuid.UUID, payload model.EncryptedPayload, revision int64) (*model.ScreenplayContentResponse, error) {
+			if revision != currentRevision {
+				return nil, model.ErrRevisionConflict
+			}
+			currentRevision++
+			return &model.ScreenplayContentResponse{
+				ScreenplayID:      sID,
+				Content:           payload,
+				Revision:          currentRevision,
+				IsEncrypted:       true,
+				EncryptionVersion: payload.Version,
+				Algorithm:         payload.Algorithm,
+				IV:                payload.IV,
+				Ciphertext:        payload.Ciphertext,
+			}, nil
+		},
 		createVersionFunc: func(ctx context.Context, sID uuid.UUID, title, content string, encPayload *model.EncryptedPayload, createdBy *uuid.UUID) (*model.ScreenplayVersionResponse, error) {
 			return &model.ScreenplayVersionResponse{
 				ID:            versionID,
@@ -683,10 +698,17 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 
 	ctx := context.Background()
 
+	validEnc := model.EncryptedPayload{
+		Version:    1,
+		Algorithm:  "AES-GCM",
+		IV:         "MTIzNDU2Nzg5MDEy",
+		Ciphertext: "VXBkYXRlZCBhY3Rpb24gaW4gZGluZXI=",
+	}
+
 	// 1. Successful autosave with correct revision
 	saved, err := screenplaySvc.SaveContent(ctx, screenplayID, userID, model.SaveContentRequest{
-		Content:  json.RawMessage(`"Updated action in diner"`),
-		Revision: 5,
+		EncryptedContent: &validEnc,
+		Revision:         5,
 	})
 	if err != nil {
 		t.Fatalf("Save content failed: %v", err)
@@ -697,8 +719,8 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 
 	// 2. Conflict: client sends outdated revision
 	_, err = screenplaySvc.SaveContent(ctx, screenplayID, userID, model.SaveContentRequest{
-		Content:  json.RawMessage(`"Stale overwrite attempt"`),
-		Revision: 5, // currently at 6
+		EncryptedContent: &validEnc,
+		Revision:         5, // currently at 6
 	})
 	if err != model.ErrRevisionConflict {
 		t.Errorf("Expected ErrRevisionConflict for stale revision, got %v", err)
