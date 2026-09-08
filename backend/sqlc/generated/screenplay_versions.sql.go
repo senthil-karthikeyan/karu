@@ -16,26 +16,22 @@ INSERT INTO screenplay_versions (
     screenplay_id,
     version_number,
     title,
-    content,
     created_by,
-    is_encrypted,
     encryption_version,
     algorithm,
     iv,
     ciphertext
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8
 )
-RETURNING id, screenplay_id, version_number, title, content, created_by, is_encrypted, encryption_version, algorithm, iv, ciphertext, created_at
+RETURNING id, screenplay_id, version_number, title, created_by, encryption_version, algorithm, iv, ciphertext, created_at
 `
 
 type CreateScreenplayVersionParams struct {
 	ScreenplayID      pgtype.UUID `json:"screenplay_id"`
 	VersionNumber     int32       `json:"version_number"`
 	Title             string      `json:"title"`
-	Content           string      `json:"content"`
 	CreatedBy         pgtype.UUID `json:"created_by"`
-	IsEncrypted       bool        `json:"is_encrypted"`
 	EncryptionVersion int32       `json:"encryption_version"`
 	Algorithm         string      `json:"algorithm"`
 	Iv                string      `json:"iv"`
@@ -47,9 +43,7 @@ type CreateScreenplayVersionRow struct {
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
 	VersionNumber     int32              `json:"version_number"`
 	Title             string             `json:"title"`
-	Content           string             `json:"content"`
 	CreatedBy         pgtype.UUID        `json:"created_by"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -62,9 +56,7 @@ func (q *Queries) CreateScreenplayVersion(ctx context.Context, arg CreateScreenp
 		arg.ScreenplayID,
 		arg.VersionNumber,
 		arg.Title,
-		arg.Content,
 		arg.CreatedBy,
-		arg.IsEncrypted,
 		arg.EncryptionVersion,
 		arg.Algorithm,
 		arg.Iv,
@@ -76,9 +68,7 @@ func (q *Queries) CreateScreenplayVersion(ctx context.Context, arg CreateScreenp
 		&i.ScreenplayID,
 		&i.VersionNumber,
 		&i.Title,
-		&i.Content,
 		&i.CreatedBy,
-		&i.IsEncrypted,
 		&i.EncryptionVersion,
 		&i.Algorithm,
 		&i.Iv,
@@ -102,7 +92,7 @@ func (q *Queries) GetLatestVersionNumber(ctx context.Context, screenplayID pgtyp
 }
 
 const getScreenplayVersionByID = `-- name: GetScreenplayVersionByID :one
-SELECT id, screenplay_id, version_number, title, content, created_by, is_encrypted, encryption_version, algorithm, iv, ciphertext, created_at
+SELECT id, screenplay_id, version_number, title, created_by, encryption_version, algorithm, iv, ciphertext, created_at
 FROM screenplay_versions
 WHERE id = $1
 `
@@ -112,9 +102,7 @@ type GetScreenplayVersionByIDRow struct {
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
 	VersionNumber     int32              `json:"version_number"`
 	Title             string             `json:"title"`
-	Content           string             `json:"content"`
 	CreatedBy         pgtype.UUID        `json:"created_by"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -130,9 +118,7 @@ func (q *Queries) GetScreenplayVersionByID(ctx context.Context, id pgtype.UUID) 
 		&i.ScreenplayID,
 		&i.VersionNumber,
 		&i.Title,
-		&i.Content,
 		&i.CreatedBy,
-		&i.IsEncrypted,
 		&i.EncryptionVersion,
 		&i.Algorithm,
 		&i.Iv,
@@ -143,7 +129,7 @@ func (q *Queries) GetScreenplayVersionByID(ctx context.Context, id pgtype.UUID) 
 }
 
 const listScreenplayVersionsByScreenplayID = `-- name: ListScreenplayVersionsByScreenplayID :many
-SELECT id, screenplay_id, version_number, title, content, created_by, is_encrypted, encryption_version, algorithm, iv, ciphertext, created_at
+SELECT id, screenplay_id, version_number, title, created_by, encryption_version, algorithm, iv, ciphertext, created_at
 FROM screenplay_versions
 WHERE screenplay_id = $1
 ORDER BY version_number DESC
@@ -154,9 +140,7 @@ type ListScreenplayVersionsByScreenplayIDRow struct {
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
 	VersionNumber     int32              `json:"version_number"`
 	Title             string             `json:"title"`
-	Content           string             `json:"content"`
 	CreatedBy         pgtype.UUID        `json:"created_by"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -178,9 +162,7 @@ func (q *Queries) ListScreenplayVersionsByScreenplayID(ctx context.Context, scre
 			&i.ScreenplayID,
 			&i.VersionNumber,
 			&i.Title,
-			&i.Content,
 			&i.CreatedBy,
-			&i.IsEncrypted,
 			&i.EncryptionVersion,
 			&i.Algorithm,
 			&i.Iv,

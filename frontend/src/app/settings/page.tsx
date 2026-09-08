@@ -359,15 +359,18 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => {
-                    const sampleKey = generateEmergencyRecoveryKey();
-                    downloadRecoveryKit(sampleKey, user.email);
-                    toast.success("Emergency Recovery Kit downloaded!");
+                  onClick={async () => {
+                    try {
+                      await useEncryptionStore.getState().regenerateRecoveryKit(user.email);
+                      toast.success("Emergency Recovery Kit regenerated and downloaded!");
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to regenerate recovery kit");
+                    }
                   }}
                   className="text-xs gap-1.5"
                 >
                   <Download className="h-3.5 w-3.5" />
-                  Download Emergency Recovery Kit (.txt)
+                  Regenerate & Download Recovery Kit (.txt)
                 </Button>
               )}
             </div>

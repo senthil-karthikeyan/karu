@@ -1,10 +1,12 @@
 /**
  * Key Management and Key Wrapping routines for Karu E2EE.
  *
- * Implements the 3-tier key hierarchy:
- * 1. UEK (User Encryption Key) -> Wraps PEK (Project Encryption Key) & User Identity Private Key
- * 2. PEK (Project Encryption Key) -> Wraps SCK (Screenplay Content Key)
- * 3. SCK (Screenplay Content Key) -> Encrypts TipTap Screenplay Content
+ * Implements the canonical 2-tier key hierarchy with ECIES sharing:
+ * 1. Passphrase -> UEK (User Encryption Key, PBKDF2-SHA256, 600,000 iterations)
+ * 2. UEK -> Wraps SCK (Screenplay Content Key) & User ECDH P-256 Private Key
+ * 3. ECIES (NIST P-256 ECDH + AES-256-GCM) -> Shares SCK securely with collaborators
+ * 4. Recovery Key (PBKDF2-SHA256) -> Wraps User ECDH Private Key for emergency recovery
+ * 5. SCK -> Encrypts TipTap Screenplay Content via AES-256-GCM
  */
 
 import {

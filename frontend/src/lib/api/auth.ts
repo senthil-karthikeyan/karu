@@ -160,4 +160,140 @@ export const authApi = {
   }> {
     return apiClient(`/users/${userId}/public-key`);
   },
+
+  async lookupUserByEmail(email: string): Promise<UserResponse> {
+    return apiClient<UserResponse>(`/users/lookup?email=${encodeURIComponent(email)}`);
+  },
+
+  async getEncryptionKeys(): Promise<{
+    userId: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    publicKey?: string;
+    encryptedPrivateKey?: string;
+    keyIv?: string;
+    algorithm: string;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/encryption-keys");
+  },
+
+  async setEncryptionKeys(data: {
+    salt: string;
+    iterations?: number;
+    hashAlgorithm?: string;
+    publicKey?: string;
+    encryptedPrivateKey?: string;
+    keyIv?: string;
+    algorithm?: string;
+    version?: number;
+  }): Promise<{
+    userId: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    publicKey?: string;
+    encryptedPrivateKey?: string;
+    keyIv?: string;
+    algorithm: string;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/encryption-keys", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getRecoveryCredentials(): Promise<{
+    userId: string;
+    credentialType: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    doubleWrappedPrivateKey?: string;
+    keyIv: string;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/recovery-credentials");
+  },
+
+  async setRecoveryCredentials(data: {
+    credentialType?: string;
+    salt: string;
+    iterations?: number;
+    hashAlgorithm?: string;
+    wrappedPrivateKey?: string;
+    doubleWrappedPrivateKey?: string;
+    keyIv: string;
+    version?: number;
+  }): Promise<{
+    userId: string;
+    credentialType: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    doubleWrappedPrivateKey?: string;
+    keyIv: string;
+    version: number;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    return apiClient("/users/me/recovery-credentials", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async recoveryLookup(email: string): Promise<{
+    userId: string;
+    credentialType: string;
+    salt: string;
+    iterations: number;
+    hashAlgorithm: string;
+    doubleWrappedPrivateKey?: string;
+    keyIv: string;
+    version: number;
+  }> {
+    return apiClient("/auth/recovery/lookup", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async recoveryReset(data: {
+    email: string;
+    credentialType: string;
+    newEncryptionKeys: {
+      salt: string;
+      iterations?: number;
+      hashAlgorithm?: string;
+      publicKey?: string;
+      encryptedPrivateKey?: string;
+      keyIv?: string;
+      algorithm?: string;
+      version?: number;
+    };
+    newRecoveryCredential?: {
+      credentialType?: string;
+      salt: string;
+      iterations?: number;
+      hashAlgorithm?: string;
+      wrappedPrivateKey?: string;
+      keyIv: string;
+      version?: number;
+    };
+  }): Promise<{ message: string }> {
+    return apiClient<{ message: string }>("/auth/recovery/reset", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 };
+

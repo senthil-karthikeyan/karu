@@ -40,8 +40,9 @@ type CreateScreenplayRequest struct {
 	WordCount        int                `json:"wordCount,omitempty"`
 	PageCount        int                `json:"pageCount,omitempty"`
 	SceneCount       int                `json:"sceneCount,omitempty"`
-	EncryptedPayload *EncryptedPayload  `json:"encryptedPayload,omitempty"`
-	WrappedKey       *WrappedKeyPayload `json:"wrappedKey,omitempty"`
+	EncryptedPayload   *EncryptedPayload  `json:"encryptedPayload,omitempty"`
+	WrappedKey         *WrappedKeyPayload `json:"wrappedKey,omitempty"`
+	EphemeralPublicKey *string            `json:"ephemeralPublicKey,omitempty"`
 }
 
 type UpdateScreenplayRequest struct {

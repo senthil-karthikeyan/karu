@@ -43,6 +43,60 @@ type UserEncryptionMetadataRequest struct {
 	HashAlgorithm string `json:"hashAlgorithm"`
 }
 
+// UserEncryptionKeysResponse represents the consolidated user encryption keys record.
+type UserEncryptionKeysResponse struct {
+	UserID              uuid.UUID `json:"userId"`
+	Salt                string    `json:"salt"`
+	Iterations          int       `json:"iterations"`
+	HashAlgorithm       string    `json:"hashAlgorithm"`
+	PublicKey           *string   `json:"publicKey,omitempty"`
+	EncryptedPrivateKey *string   `json:"encryptedPrivateKey,omitempty"`
+	KeyIV               *string   `json:"keyIv,omitempty"`
+	Algorithm           string    `json:"algorithm"`
+	Version             int       `json:"version"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+}
+
+// UserEncryptionKeysRequest is sent when configuring or updating the complete user encryption keys.
+type UserEncryptionKeysRequest struct {
+	Salt                string  `json:"salt" binding:"required"`
+	Iterations          int     `json:"iterations"`
+	HashAlgorithm       string  `json:"hashAlgorithm"`
+	PublicKey           *string `json:"publicKey,omitempty"`
+	EncryptedPrivateKey *string `json:"encryptedPrivateKey,omitempty"`
+	KeyIV               *string `json:"keyIv,omitempty"`
+	Algorithm           string  `json:"algorithm"`
+	Version             int     `json:"version"`
+}
+
+// UserRecoveryCredentialResponse represents a stored recovery credential (recovery key or passphrase).
+type UserRecoveryCredentialResponse struct {
+	UserID                   uuid.UUID `json:"userId"`
+	CredentialType           string    `json:"credentialType"`
+	Salt                     string    `json:"salt"`
+	Iterations               int       `json:"iterations"`
+	HashAlgorithm            string    `json:"hashAlgorithm"`
+	DoubleWrappedDEK         *string   `json:"doubleWrappedDek,omitempty"`
+	DoubleWrappedPrivateKey  *string   `json:"doubleWrappedPrivateKey,omitempty"`
+	KeyIV                    string    `json:"keyIv"`
+	Version                  int       `json:"version"`
+	CreatedAt                time.Time `json:"createdAt"`
+	UpdatedAt                time.Time `json:"updatedAt"`
+}
+
+// UserRecoveryCredentialRequest is sent when enrolling or updating a recovery credential.
+type UserRecoveryCredentialRequest struct {
+	CredentialType          string  `json:"credentialType" binding:"required"`
+	Salt                    string  `json:"salt" binding:"required"`
+	Iterations              int     `json:"iterations"`
+	HashAlgorithm           string  `json:"hashAlgorithm"`
+	DoubleWrappedDEK        *string `json:"doubleWrappedDek,omitempty"`
+	DoubleWrappedPrivateKey *string `json:"doubleWrappedPrivateKey,omitempty"`
+	KeyIV                   string  `json:"keyIv" binding:"required"`
+	Version                 int     `json:"version"`
+}
+
 // EncryptedPayload represents the versioned AES-GCM ciphertext payload produced by Web Crypto.
 type EncryptedPayload struct {
 	Version    int    `json:"version"`
@@ -51,7 +105,7 @@ type EncryptedPayload struct {
 	Ciphertext string `json:"ciphertext"` // Base64 encoded ciphertext + GCM auth tag
 }
 
-// WrappedKeyPayload represents generic wrapped key material (PEK or SCK).
+// WrappedKeyPayload represents generic wrapped key material.
 type WrappedKeyPayload struct {
 	Version    int    `json:"version"`
 	Algorithm  string `json:"algorithm"`
@@ -59,15 +113,103 @@ type WrappedKeyPayload struct {
 	WrappedKey string `json:"wrappedKey"` // Base64 encoded wrapped key bytes
 }
 
+// ECIESWrappedKeyPayload represents an SCK wrapped for a recipient using ECDH ephemeral keypair and AES-256-GCM.
+type ECIESWrappedKeyPayload struct {
+	Version            int    `json:"version"`
+	Algorithm          string `json:"algorithm"`          // "ECIES-P256-AES-GCM"
+	EphemeralPublicKey string `json:"ephemeralPublicKey"` // Base64 SPKI
+	IV                 string `json:"iv"`                 // Base64 12-byte IV
+	WrappedKey         string `json:"wrappedKey"`         // Base64 ciphertext
+}
+
 // ScreenplayKeyResponse is returned when retrieving a wrapped key for a screenplay.
 type ScreenplayKeyResponse struct {
-	ScreenplayID uuid.UUID `json:"screenplayId"`
-	Version      int       `json:"version"`
-	Algorithm    string    `json:"algorithm"`
-	IV           string    `json:"iv"`
-	WrappedKey   string    `json:"wrappedKey"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ScreenplayID       uuid.UUID  `json:"screenplayId"`
+	Version            int        `json:"version"`
+	Algorithm          string     `json:"algorithm"`
+	IV                 string     `json:"iv"`
+	WrappedKey         string     `json:"wrappedKey"`
+	Role               string     `json:"role,omitempty"`
+	EphemeralPublicKey *string    `json:"ephemeralPublicKey,omitempty"`
+	GrantedBy          *uuid.UUID `json:"grantedBy,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+}
+
+// ScreenplayAccessKeyResponse represents an access key grant in screenplay_access_keys.
+type ScreenplayAccessKeyResponse struct {
+	ID                 uuid.UUID  `json:"id"`
+	ScreenplayID       uuid.UUID  `json:"screenplayId"`
+	UserID             uuid.UUID  `json:"userId"`
+	Role               string     `json:"role"`
+	EphemeralPublicKey *string    `json:"ephemeralPublicKey,omitempty"`
+	KeyIV              string     `json:"keyIv"`
+	WrappedKey         string     `json:"wrappedKey"`
+	Version            int        `json:"version"`
+	Algorithm          string     `json:"algorithm"`
+	GrantedBy          *uuid.UUID `json:"grantedBy,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
+}
+
+// ScreenplayAccessKeyRequest is sent when granting or updating access to a screenplay.
+type ScreenplayAccessKeyRequest struct {
+	ScreenplayID       uuid.UUID `json:"screenplayId"`
+	UserID             uuid.UUID `json:"userId" binding:"required"`
+	Role               string    `json:"role"`
+	EphemeralPublicKey *string   `json:"ephemeralPublicKey,omitempty"`
+	KeyIV              string    `json:"keyIv" binding:"required"`
+	WrappedKey         string    `json:"wrappedKey" binding:"required"`
+	Version            int       `json:"version"`
+	Algorithm          string    `json:"algorithm"`
+}
+
+// ScreenplayCollaboratorResponse represents a collaborator on a screenplay.
+type ScreenplayCollaboratorResponse struct {
+	UserID    uuid.UUID  `json:"userId"`
+	Email     string     `json:"email"`
+	Name      string     `json:"name"`
+	Role      string     `json:"role"`
+	GrantedBy *uuid.UUID `json:"grantedBy,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	UpdatedAt time.Time  `json:"updatedAt"`
+}
+
+// ShareScreenplayRequest represents a request to share a screenplay with a recipient.
+type ShareScreenplayRequest struct {
+	RecipientUserID    uuid.UUID `json:"recipientUserId" binding:"required"`
+	Role               string    `json:"role" binding:"required"` // "editor" or "viewer"
+	EphemeralPublicKey string    `json:"ephemeralPublicKey" binding:"required"`
+	KeyIV              string    `json:"keyIv" binding:"required"`
+	WrappedKey         string    `json:"wrappedKey" binding:"required"`
+	Algorithm          string    `json:"algorithm"`
+	Version            int       `json:"version"`
+}
+
+// RecoveryLookupRequest is used to lookup recovery parameters for an email.
+type RecoveryLookupRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// RecoveryLookupResponse provides recovery salt/PBKDF2 info and double-wrapped DEK.
+type RecoveryLookupResponse struct {
+	UserID                   uuid.UUID `json:"userId"`
+	CredentialType           string    `json:"credentialType"`
+	Salt                     string    `json:"salt"`
+	Iterations               int       `json:"iterations"`
+	HashAlgorithm            string    `json:"hashAlgorithm"`
+	DoubleWrappedDEK         *string   `json:"doubleWrappedDek,omitempty"`
+	DoubleWrappedPrivateKey  *string   `json:"doubleWrappedPrivateKey,omitempty"`
+	KeyIV                    string    `json:"keyIv"`
+	Version                  int       `json:"version"`
+}
+
+// RecoveryResetRequest is used to reset credentials using a recovery secret.
+type RecoveryResetRequest struct {
+	Email                string                    `json:"email" binding:"required,email"`
+	CredentialType       string                    `json:"credentialType" binding:"required"`
+	NewEncryptionKeys    UserEncryptionKeysRequest `json:"newEncryptionKeys" binding:"required"`
+	NewRecoveryCredential *UserRecoveryCredentialRequest `json:"newRecoveryCredential,omitempty"`
 }
 
 // UserEncryptionIdentityPayload represents the public key and UEK-wrapped private key for offline sharing.

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -125,6 +124,15 @@ type mockScreenplayRepo struct {
 	upsertScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID, wrappedKey, keyIV, algorithm string, version int) (*model.ScreenplayKeyResponse, error)
 	deleteScreenplayKeyFunc func(ctx context.Context, screenplayID, userID uuid.UUID) error
 
+	getUserEncryptionKeysFunc        func(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error)
+	upsertUserEncryptionKeysFunc     func(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error)
+	getUserRecoveryCredentialFunc    func(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error)
+	upsertUserRecoveryCredentialFunc func(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error)
+	getScreenplayAccessKeyFunc       func(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error)
+	upsertScreenplayAccessKeyFunc    func(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error)
+	deleteScreenplayAccessKeyFunc    func(ctx context.Context, screenplayID, userID uuid.UUID) error
+	listCollaboratorsFunc            func(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error)
+
 	createScreenplayFunc func(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error)
 	getScreenplayFunc    func(ctx context.Context, id uuid.UUID) (*generated.GetScreenplayByIDRow, error)
 	getOwnershipFunc          func(ctx context.Context, id, userID uuid.UUID) (*generated.GetScreenplayByIDAndUserIDRow, error)
@@ -214,6 +222,96 @@ func (m *mockScreenplayRepo) DeleteScreenplayKey(ctx context.Context, screenplay
 		return m.deleteScreenplayKeyFunc(ctx, screenplayID, userID)
 	}
 	return nil
+}
+
+func (m *mockScreenplayRepo) GetUserEncryptionKeys(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error) {
+	if m.getUserEncryptionKeysFunc != nil {
+		return m.getUserEncryptionKeysFunc(ctx, userID)
+	}
+	return nil, model.ErrNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertUserEncryptionKeys(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error) {
+	if m.upsertUserEncryptionKeysFunc != nil {
+		return m.upsertUserEncryptionKeysFunc(ctx, userID, req)
+	}
+	return &model.UserEncryptionKeysResponse{
+		UserID:        userID,
+		Salt:          req.Salt,
+		Iterations:    req.Iterations,
+		HashAlgorithm: req.HashAlgorithm,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) GetUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) (*model.UserRecoveryCredentialResponse, error) {
+	if m.getUserRecoveryCredentialFunc != nil {
+		return m.getUserRecoveryCredentialFunc(ctx, userID, credType)
+	}
+	return nil, model.ErrNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertUserRecoveryCredential(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error) {
+	if m.upsertUserRecoveryCredentialFunc != nil {
+		return m.upsertUserRecoveryCredentialFunc(ctx, userID, req)
+	}
+	return &model.UserRecoveryCredentialResponse{
+		UserID:         userID,
+		CredentialType: req.CredentialType,
+		Salt:           req.Salt,
+		Iterations:     req.Iterations,
+		HashAlgorithm:  req.HashAlgorithm,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) DeleteUserRecoveryCredential(ctx context.Context, userID uuid.UUID, credType string) error {
+	return nil
+}
+
+func (m *mockScreenplayRepo) GetScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	if m.getScreenplayAccessKeyFunc != nil {
+		return m.getScreenplayAccessKeyFunc(ctx, screenplayID, userID)
+	}
+	return nil, model.ErrScreenplayKeyNotFound
+}
+
+func (m *mockScreenplayRepo) UpsertScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID, req model.ScreenplayAccessKeyRequest, grantedBy *uuid.UUID) (*model.ScreenplayAccessKeyResponse, error) {
+	if m.upsertScreenplayAccessKeyFunc != nil {
+		return m.upsertScreenplayAccessKeyFunc(ctx, screenplayID, userID, req, grantedBy)
+	}
+	return &model.ScreenplayAccessKeyResponse{
+		ScreenplayID:       screenplayID,
+		UserID:             userID,
+		Role:               req.Role,
+		KeyIV:              req.KeyIV,
+		WrappedKey:         req.WrappedKey,
+		EphemeralPublicKey: req.EphemeralPublicKey,
+		Version:            req.Version,
+		Algorithm:          req.Algorithm,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}, nil
+}
+
+func (m *mockScreenplayRepo) DeleteScreenplayAccessKey(ctx context.Context, screenplayID, userID uuid.UUID) error {
+	if m.deleteScreenplayAccessKeyFunc != nil {
+		return m.deleteScreenplayAccessKeyFunc(ctx, screenplayID, userID)
+	}
+	return nil
+}
+
+func (m *mockScreenplayRepo) ListScreenplayAccessKeys(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayAccessKeyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockScreenplayRepo) ListCollaboratorsByScreenplayID(ctx context.Context, screenplayID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error) {
+	if m.listCollaboratorsFunc != nil {
+		return m.listCollaboratorsFunc(ctx, screenplayID)
+	}
+	return nil, nil
 }
 
 func (m *mockScreenplayRepo) CreateScreenplay(ctx context.Context, projectID uuid.UUID, title, description, initialContent string, encPayload *model.EncryptedPayload, wrappedKey *model.WrappedKeyPayload, userID uuid.UUID, wordCount, pageCount, sceneCount int) (*model.ScreenplayDetailResponse, error) {
@@ -595,6 +693,22 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 				Revision:     currentRevision,
 			}, nil
 		},
+		saveEncryptedContent: func(ctx context.Context, sID uuid.UUID, payload model.EncryptedPayload, revision int64) (*model.ScreenplayContentResponse, error) {
+			if revision != currentRevision {
+				return nil, model.ErrRevisionConflict
+			}
+			currentRevision++
+			return &model.ScreenplayContentResponse{
+				ScreenplayID:      sID,
+				Content:           payload,
+				Revision:          currentRevision,
+				IsEncrypted:       true,
+				EncryptionVersion: payload.Version,
+				Algorithm:         payload.Algorithm,
+				IV:                payload.IV,
+				Ciphertext:        payload.Ciphertext,
+			}, nil
+		},
 		createVersionFunc: func(ctx context.Context, sID uuid.UUID, title, content string, encPayload *model.EncryptedPayload, createdBy *uuid.UUID) (*model.ScreenplayVersionResponse, error) {
 			return &model.ScreenplayVersionResponse{
 				ID:            versionID,
@@ -618,10 +732,17 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 
 	ctx := context.Background()
 
+	validEnc := model.EncryptedPayload{
+		Version:    1,
+		Algorithm:  "AES-GCM",
+		IV:         "MTIzNDU2Nzg5MDEy",
+		Ciphertext: "VXBkYXRlZCBhY3Rpb24gaW4gZGluZXI=",
+	}
+
 	// 1. Successful autosave with correct revision
 	saved, err := screenplaySvc.SaveContent(ctx, screenplayID, userID, model.SaveContentRequest{
-		Content:  json.RawMessage(`"Updated action in diner"`),
-		Revision: 5,
+		EncryptedContent: &validEnc,
+		Revision:         5,
 	})
 	if err != nil {
 		t.Fatalf("Save content failed: %v", err)
@@ -632,8 +753,8 @@ func TestScreenplayAutosaveAndVersioning(t *testing.T) {
 
 	// 2. Conflict: client sends outdated revision
 	_, err = screenplaySvc.SaveContent(ctx, screenplayID, userID, model.SaveContentRequest{
-		Content:  json.RawMessage(`"Stale overwrite attempt"`),
-		Revision: 5, // currently at 6
+		EncryptedContent: &validEnc,
+		Revision:         5, // currently at 6
 	})
 	if err != model.ErrRevisionConflict {
 		t.Errorf("Expected ErrRevisionConflict for stale revision, got %v", err)

@@ -3,12 +3,15 @@ import type {
   EncryptedPayload,
   TipTapDocumentJSON,
   WrappedKeyPayload,
+  ScreenplayCollaborator,
+  ScreenplayAccessKey,
 } from "@/lib/crypto";
 import {
   encryptScreenplayContent,
   decryptScreenplayContent,
   parseEncryptedPayloadString,
 } from "@/lib/crypto";
+
 
 export interface ScreenplayResponse {
   id: string;
@@ -169,7 +172,7 @@ export const screenplaysApi = {
     return apiClient<ScreenplayContentResponse>(`/screenplays/${id}/content`, {
       method: "PUT",
       body: JSON.stringify({
-        content: JSON.stringify(encryptedPayload),
+        encryptedContent: encryptedPayload,
         revision,
         wordCount: stats?.wordCount,
         pageCount: stats?.pageCount,
@@ -292,4 +295,37 @@ export const screenplaysApi = {
       body: JSON.stringify(data),
     });
   },
+
+  async shareScreenplay(
+    id: string,
+    data: {
+      recipientUserId: string;
+      role: "editor" | "viewer";
+      ephemeralPublicKey: string;
+      keyIv: string;
+      wrappedKey: string;
+      algorithm?: string;
+      version?: number;
+    }
+  ): Promise<ScreenplayAccessKey> {
+    return apiClient<ScreenplayAccessKey>(`/screenplays/${id}/shares`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async listCollaborators(id: string): Promise<ScreenplayCollaborator[]> {
+    const data = await apiClient<ScreenplayCollaborator[]>(`/screenplays/${id}/collaborators`);
+    return data || [];
+  },
+
+  async revokeCollaborator(
+    id: string,
+    userId: string
+  ): Promise<{ message: string }> {
+    return apiClient<{ message: string }>(`/screenplays/${id}/collaborators/${userId}`, {
+      method: "DELETE",
+    });
+  },
 };
+

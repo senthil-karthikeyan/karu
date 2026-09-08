@@ -106,6 +106,36 @@ func (m *mockUserService) GetUserPublicKey(ctx context.Context, userID uuid.UUID
 	return nil, nil
 }
 
+func (m *mockUserService) LookupUserByEmail(ctx context.Context, email string) (*model.UserResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) GetEncryptionKeys(ctx context.Context, userID uuid.UUID) (*model.UserEncryptionKeysResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) SetEncryptionKeys(ctx context.Context, userID uuid.UUID, req model.UserEncryptionKeysRequest) (*model.UserEncryptionKeysResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) GetRecoveryCredentials(ctx context.Context, userID uuid.UUID) (*model.UserRecoveryCredentialResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) SetRecoveryCredentials(ctx context.Context, userID uuid.UUID, req model.UserRecoveryCredentialRequest) (*model.UserRecoveryCredentialResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) RecoveryLookup(ctx context.Context, email string) (*model.RecoveryLookupResponse, error) {
+	return nil, nil
+}
+
+func (m *mockUserService) RecoveryReset(ctx context.Context, req model.RecoveryResetRequest) error {
+	return nil
+}
+
+
+
 // Mock ProjectService
 type mockProjectService struct {
 	createProjectFunc func(ctx context.Context, userID uuid.UUID, req model.CreateProjectRequest) (*model.ProjectResponse, error)
@@ -255,6 +285,16 @@ func (m *mockScreenplayService) RestoreVersion(ctx context.Context, screenplayID
 	}
 	return nil, nil
 }
+func (m *mockScreenplayService) ShareScreenplay(ctx context.Context, screenplayID, callerID uuid.UUID, req model.ShareScreenplayRequest) (*model.ScreenplayAccessKeyResponse, error) {
+	return nil, nil
+}
+func (m *mockScreenplayService) ListCollaborators(ctx context.Context, screenplayID, callerID uuid.UUID) ([]model.ScreenplayCollaboratorResponse, error) {
+	return nil, nil
+}
+func (m *mockScreenplayService) RevokeCollaborator(ctx context.Context, screenplayID, callerID, targetUserID uuid.UUID) error {
+	return nil
+}
+
 
 func setupTestApp(
 	authSvc *mockAuthService,

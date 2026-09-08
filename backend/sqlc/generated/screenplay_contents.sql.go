@@ -14,24 +14,20 @@ import (
 const createScreenplayContent = `-- name: CreateScreenplayContent :one
 INSERT INTO screenplay_contents (
     screenplay_id,
-    content,
     revision,
-    is_encrypted,
     encryption_version,
     algorithm,
     iv,
     ciphertext
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6
 )
-RETURNING id, screenplay_id, content, revision, is_encrypted, encryption_version, algorithm, iv, ciphertext, updated_at
+RETURNING id, screenplay_id, revision, encryption_version, algorithm, iv, ciphertext, updated_at
 `
 
 type CreateScreenplayContentParams struct {
 	ScreenplayID      pgtype.UUID `json:"screenplay_id"`
-	Content           string      `json:"content"`
 	Revision          int64       `json:"revision"`
-	IsEncrypted       bool        `json:"is_encrypted"`
 	EncryptionVersion int32       `json:"encryption_version"`
 	Algorithm         string      `json:"algorithm"`
 	Iv                string      `json:"iv"`
@@ -41,9 +37,7 @@ type CreateScreenplayContentParams struct {
 type CreateScreenplayContentRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
-	Content           string             `json:"content"`
 	Revision          int64              `json:"revision"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -54,9 +48,7 @@ type CreateScreenplayContentRow struct {
 func (q *Queries) CreateScreenplayContent(ctx context.Context, arg CreateScreenplayContentParams) (CreateScreenplayContentRow, error) {
 	row := q.db.QueryRow(ctx, createScreenplayContent,
 		arg.ScreenplayID,
-		arg.Content,
 		arg.Revision,
-		arg.IsEncrypted,
 		arg.EncryptionVersion,
 		arg.Algorithm,
 		arg.Iv,
@@ -66,9 +58,7 @@ func (q *Queries) CreateScreenplayContent(ctx context.Context, arg CreateScreenp
 	err := row.Scan(
 		&i.ID,
 		&i.ScreenplayID,
-		&i.Content,
 		&i.Revision,
-		&i.IsEncrypted,
 		&i.EncryptionVersion,
 		&i.Algorithm,
 		&i.Iv,
@@ -81,22 +71,18 @@ func (q *Queries) CreateScreenplayContent(ctx context.Context, arg CreateScreenp
 const forceSetScreenplayContent = `-- name: ForceSetScreenplayContent :one
 UPDATE screenplay_contents
 SET
-    content = $2,
-    is_encrypted = $3,
-    encryption_version = $4,
-    algorithm = $5,
-    iv = $6,
-    ciphertext = $7,
+    encryption_version = $2,
+    algorithm = $3,
+    iv = $4,
+    ciphertext = $5,
     revision = revision + 1,
     updated_at = NOW()
 WHERE screenplay_id = $1
-RETURNING id, screenplay_id, content, revision, is_encrypted, encryption_version, algorithm, iv, ciphertext, updated_at
+RETURNING id, screenplay_id, revision, encryption_version, algorithm, iv, ciphertext, updated_at
 `
 
 type ForceSetScreenplayContentParams struct {
 	ScreenplayID      pgtype.UUID `json:"screenplay_id"`
-	Content           string      `json:"content"`
-	IsEncrypted       bool        `json:"is_encrypted"`
 	EncryptionVersion int32       `json:"encryption_version"`
 	Algorithm         string      `json:"algorithm"`
 	Iv                string      `json:"iv"`
@@ -106,9 +92,7 @@ type ForceSetScreenplayContentParams struct {
 type ForceSetScreenplayContentRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
-	Content           string             `json:"content"`
 	Revision          int64              `json:"revision"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -119,8 +103,6 @@ type ForceSetScreenplayContentRow struct {
 func (q *Queries) ForceSetScreenplayContent(ctx context.Context, arg ForceSetScreenplayContentParams) (ForceSetScreenplayContentRow, error) {
 	row := q.db.QueryRow(ctx, forceSetScreenplayContent,
 		arg.ScreenplayID,
-		arg.Content,
-		arg.IsEncrypted,
 		arg.EncryptionVersion,
 		arg.Algorithm,
 		arg.Iv,
@@ -130,9 +112,7 @@ func (q *Queries) ForceSetScreenplayContent(ctx context.Context, arg ForceSetScr
 	err := row.Scan(
 		&i.ID,
 		&i.ScreenplayID,
-		&i.Content,
 		&i.Revision,
-		&i.IsEncrypted,
 		&i.EncryptionVersion,
 		&i.Algorithm,
 		&i.Iv,
@@ -143,7 +123,7 @@ func (q *Queries) ForceSetScreenplayContent(ctx context.Context, arg ForceSetScr
 }
 
 const getScreenplayContent = `-- name: GetScreenplayContent :one
-SELECT id, screenplay_id, content, revision, is_encrypted, encryption_version, algorithm, iv, ciphertext, updated_at
+SELECT id, screenplay_id, revision, encryption_version, algorithm, iv, ciphertext, updated_at
 FROM screenplay_contents
 WHERE screenplay_id = $1
 `
@@ -151,9 +131,7 @@ WHERE screenplay_id = $1
 type GetScreenplayContentRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
-	Content           string             `json:"content"`
 	Revision          int64              `json:"revision"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -167,9 +145,7 @@ func (q *Queries) GetScreenplayContent(ctx context.Context, screenplayID pgtype.
 	err := row.Scan(
 		&i.ID,
 		&i.ScreenplayID,
-		&i.Content,
 		&i.Revision,
-		&i.IsEncrypted,
 		&i.EncryptionVersion,
 		&i.Algorithm,
 		&i.Iv,
@@ -182,16 +158,14 @@ func (q *Queries) GetScreenplayContent(ctx context.Context, screenplayID pgtype.
 const updateEncryptedScreenplayContentWithRevision = `-- name: UpdateEncryptedScreenplayContentWithRevision :one
 UPDATE screenplay_contents
 SET
-    is_encrypted = TRUE,
     encryption_version = $3,
     algorithm = $4,
     iv = $5,
     ciphertext = $6,
-    content = '',
     revision = revision + 1,
     updated_at = NOW()
 WHERE screenplay_id = $1 AND revision = $2
-RETURNING id, screenplay_id, content, revision, is_encrypted, encryption_version, algorithm, iv, ciphertext, updated_at
+RETURNING id, screenplay_id, revision, encryption_version, algorithm, iv, ciphertext, updated_at
 `
 
 type UpdateEncryptedScreenplayContentWithRevisionParams struct {
@@ -206,9 +180,7 @@ type UpdateEncryptedScreenplayContentWithRevisionParams struct {
 type UpdateEncryptedScreenplayContentWithRevisionRow struct {
 	ID                pgtype.UUID        `json:"id"`
 	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
-	Content           string             `json:"content"`
 	Revision          int64              `json:"revision"`
-	IsEncrypted       bool               `json:"is_encrypted"`
 	EncryptionVersion int32              `json:"encryption_version"`
 	Algorithm         string             `json:"algorithm"`
 	Iv                string             `json:"iv"`
@@ -229,59 +201,7 @@ func (q *Queries) UpdateEncryptedScreenplayContentWithRevision(ctx context.Conte
 	err := row.Scan(
 		&i.ID,
 		&i.ScreenplayID,
-		&i.Content,
 		&i.Revision,
-		&i.IsEncrypted,
-		&i.EncryptionVersion,
-		&i.Algorithm,
-		&i.Iv,
-		&i.Ciphertext,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateScreenplayContentWithRevision = `-- name: UpdateScreenplayContentWithRevision :one
-UPDATE screenplay_contents
-SET
-    content = $3,
-    is_encrypted = FALSE,
-    iv = '',
-    ciphertext = '',
-    revision = revision + 1,
-    updated_at = NOW()
-WHERE screenplay_id = $1 AND revision = $2
-RETURNING id, screenplay_id, content, revision, is_encrypted, encryption_version, algorithm, iv, ciphertext, updated_at
-`
-
-type UpdateScreenplayContentWithRevisionParams struct {
-	ScreenplayID pgtype.UUID `json:"screenplay_id"`
-	Revision     int64       `json:"revision"`
-	Content      string      `json:"content"`
-}
-
-type UpdateScreenplayContentWithRevisionRow struct {
-	ID                pgtype.UUID        `json:"id"`
-	ScreenplayID      pgtype.UUID        `json:"screenplay_id"`
-	Content           string             `json:"content"`
-	Revision          int64              `json:"revision"`
-	IsEncrypted       bool               `json:"is_encrypted"`
-	EncryptionVersion int32              `json:"encryption_version"`
-	Algorithm         string             `json:"algorithm"`
-	Iv                string             `json:"iv"`
-	Ciphertext        string             `json:"ciphertext"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) UpdateScreenplayContentWithRevision(ctx context.Context, arg UpdateScreenplayContentWithRevisionParams) (UpdateScreenplayContentWithRevisionRow, error) {
-	row := q.db.QueryRow(ctx, updateScreenplayContentWithRevision, arg.ScreenplayID, arg.Revision, arg.Content)
-	var i UpdateScreenplayContentWithRevisionRow
-	err := row.Scan(
-		&i.ID,
-		&i.ScreenplayID,
-		&i.Content,
-		&i.Revision,
-		&i.IsEncrypted,
 		&i.EncryptionVersion,
 		&i.Algorithm,
 		&i.Iv,
