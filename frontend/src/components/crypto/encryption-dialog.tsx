@@ -71,15 +71,15 @@ export function EncryptionDialog({
 
     if (isRecovering) {
       if (!recoveryCode.trim()) {
-        setError("Please enter your Emergency Recovery Code.");
+        setError("Please enter your Recovery Code.");
         return;
       }
       if (!secret || secret.length < 8) {
-        setError("New passphrase must be at least 8 characters long.");
+        setError("New encryption passphrase must be at least 8 characters long.");
         return;
       }
       if (secret !== confirmSecret) {
-        setError("New passphrases do not match.");
+        setError("New encryption passphrases do not match.");
         return;
       }
 
@@ -91,7 +91,7 @@ export function EncryptionDialog({
       setIsLoading(true);
       try {
         await resetPassphraseWithRecovery(user.email, recoveryCode, secret);
-        toast.success("Passphrase reset successfully! Session unlocked.");
+        toast.success("Encryption passphrase reset successfully! Screenplays unlocked.");
         if (onSuccess) {
           await onSuccess();
         }
@@ -113,13 +113,13 @@ export function EncryptionDialog({
     }
 
     if (!secret || secret.length < 8) {
-      setError("Encryption secret must be at least 8 characters long.");
+      setError("Encryption passphrase must be at least 8 characters long.");
       return;
     }
 
     if (effectiveMode === "setup") {
       if (secret !== confirmSecret) {
-        setError("Encryption secrets do not match.");
+        setError("Encryption passphrases do not match.");
         return;
       }
     }
@@ -139,7 +139,7 @@ export function EncryptionDialog({
         await unlockWithSecret(secret, meta);
       }
 
-      toast.success(effectiveMode === "setup" ? "Zero-Knowledge Encryption Activated!" : "Screenplay Unlocked!");
+      toast.success(effectiveMode === "setup" ? "Protection Activated!" : "Screenplay Unlocked!");
       if (onSuccess) {
         await onSuccess();
       }
@@ -148,8 +148,21 @@ export function EncryptionDialog({
       setConfirmSecret("");
       onOpenChange(false);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Incorrect encryption password.";
-      setError(errorMsg);
+      const msg = err instanceof Error ? err.message : "";
+      if (
+        !msg ||
+        msg.toLowerCase().includes("incorrect") ||
+        msg.toLowerCase().includes("password") ||
+        msg.toLowerCase().includes("passphrase") ||
+        msg.toLowerCase().includes("operation") ||
+        msg.toLowerCase().includes("tag") ||
+        msg.toLowerCase().includes("unwrap") ||
+        msg.toLowerCase().includes("decrypt")
+      ) {
+        setError("Incorrect encryption passphrase. Please try again.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -173,15 +186,15 @@ export function EncryptionDialog({
               {isRecovering
                 ? "Recover Encryption Access"
                 : effectiveMode === "setup"
-                  ? "Protect Your Screenplay"
-                  : "Unlock Screenplay"}
+                  ? "Protect Your Screenplays"
+                  : "Unlock Your Screenplays"}
             </DialogTitle>
             <DialogDescription className="text-center text-sm text-muted-foreground pt-1">
               {isRecovering
-                ? "Enter your Emergency Recovery Code to reset your encryption passphrase."
+                ? "Enter your Recovery Code to create a new encryption passphrase."
                 : effectiveMode === "setup"
-                  ? "Create a client-side encryption secret. Your screenplay will be encrypted in your browser using AES-GCM (256-bit)."
-                  : "Enter your encryption secret to decrypt and edit this screenplay."}
+                  ? "Create an encryption passphrase to protect your screenplays. You'll need this passphrase to unlock your work."
+                  : "Enter your encryption passphrase to unlock and access your screenplays."}
             </DialogDescription>
           </DialogHeader>
 
@@ -190,7 +203,7 @@ export function EncryptionDialog({
               <>
                 <div className="space-y-2">
                   <Label htmlFor="recovery-code" className="text-xs font-semibold">
-                    Emergency Recovery Code
+                    Recovery Code
                   </Label>
                   <Input
                     id="recovery-code"
@@ -229,7 +242,7 @@ export function EncryptionDialog({
 
                 <div className="space-y-2">
                   <Label htmlFor="confirm-new-secret" className="text-xs font-semibold">
-                    Confirm New Passphrase
+                    Confirm New Encryption Passphrase
                   </Label>
                   <Input
                     id="confirm-new-secret"
@@ -247,19 +260,18 @@ export function EncryptionDialog({
                   <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 flex gap-2.5 text-xs text-amber-700 dark:text-amber-300">
                     <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
                     <p className="leading-relaxed">
-                      <strong>Important:</strong> We cannot recover this secret for you. If lost, you must
-                      use your Emergency Recovery Code.
+                      <strong>Important:</strong> Your encryption passphrase cannot be recovered by Karu. If lost, you must use your Recovery Code.
                     </p>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="encryption-secret">Encryption Secret</Label>
+                  <Label htmlFor="encryption-secret">Encryption Passphrase</Label>
                   <div className="relative">
                     <Input
                       id="encryption-secret"
                       type={showSecret ? "text" : "password"}
-                      placeholder={effectiveMode === "setup" ? "Enter a strong passphrase" : "Enter your secret"}
+                      placeholder="Enter your encryption passphrase"
                       value={secret}
                       onChange={(e) => setSecret(e.target.value)}
                       autoFocus
@@ -278,11 +290,11 @@ export function EncryptionDialog({
 
                 {effectiveMode === "setup" && (
                   <div className="space-y-2">
-                    <Label htmlFor="confirm-encryption-secret">Confirm Encryption Secret</Label>
+                    <Label htmlFor="confirm-encryption-secret">Confirm Encryption Passphrase</Label>
                     <Input
                       id="confirm-encryption-secret"
                       type={showSecret ? "text" : "password"}
-                      placeholder="Repeat your passphrase"
+                      placeholder="Confirm your encryption passphrase"
                       value={confirmSecret}
                       onChange={(e) => setConfirmSecret(e.target.value)}
                       disabled={isLoading}
@@ -301,7 +313,7 @@ export function EncryptionDialog({
                       className="text-xs text-primary hover:underline font-medium inline-flex items-center gap-1"
                     >
                       <LifeBuoy className="w-3 h-3" />
-                      Forgot passphrase? Use Recovery Code
+                      Forgot encryption passphrase? Use Recovery Code
                     </button>
                   </div>
                 )}
@@ -349,7 +361,7 @@ export function EncryptionDialog({
               {isRecovering
                 ? "Reset & Unlock"
                 : effectiveMode === "setup"
-                  ? "Enable Encryption"
+                  ? "Protect Screenplays"
                   : "Unlock"}
             </Button>
           </DialogFooter>

@@ -74,7 +74,7 @@ export function EncryptionOnboardingModal({
     try {
       await navigator.clipboard.writeText(recoveryKey);
       setCopiedKey(true);
-      toast.success("Emergency Recovery Key copied to clipboard!");
+      toast.success("Recovery Code copied to clipboard!");
       setTimeout(() => setCopiedKey(false), 2500);
     } catch {
       toast.error("Failed to copy to clipboard");
@@ -84,13 +84,13 @@ export function EncryptionOnboardingModal({
   const handleDownloadKit = () => {
     downloadRecoveryKit(recoveryKey, user?.email || "writer@karu.app");
     setDownloadedKit(true);
-    toast.success("Recovery kit downloaded successfully!");
+    toast.success("Recovery code downloaded successfully!");
   };
 
   const handleFinalizeSetup = async () => {
     setError(null);
     if (!confirmedBackup && !downloadedKit) {
-      setError("Please confirm you have saved or downloaded your Emergency Recovery Key.");
+      setError("Please confirm you have saved or downloaded your Recovery Code.");
       return;
     }
 
@@ -99,10 +99,9 @@ export function EncryptionOnboardingModal({
 
     try {
       await setupNewSecret(secret, recoveryKey);
-      toast.success("Zero-Knowledge Encryption Activated!", {
-        description: "Your screenplay content is now protected with client-side AES-GCM (256-bit).",
+      toast.success("Protection Activated!", {
+        description: "Your screenplays are now protected.",
       });
-
 
       if (onSuccess) {
         await onSuccess();
@@ -135,40 +134,40 @@ export function EncryptionOnboardingModal({
           </div>
           <DialogTitle className="text-xl font-bold tracking-tight">
             {step === 1
-              ? "Set Up Zero-Knowledge Encryption"
+              ? "Protect Your Screenplays"
               : step === 2
-                ? "Save Your Emergency Recovery Key"
-                : "Activating Encryption..."}
+                ? "Save Your Recovery Code"
+                : "Securing Your Workspace..."}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
             {step === 1
-              ? "Protect your screenplays with client-side AES-256-GCM. Karu servers cannot read your scripts."
+              ? "Create an encryption passphrase to protect your screenplays. You'll need this passphrase to unlock your work."
               : step === 2
-                ? "Your recovery key is your ONLY safeguard if you ever forget your passphrase."
-                : "Deriving keys using PBKDF2 (600,000 rounds) and initializing your cryptographic identity."}
+                ? "Your recovery code is your safeguard if you ever forget your encryption passphrase."
+                : "Setting up your encryption passphrase..."}
           </DialogDescription>
         </div>
 
-        {/* Step 1: Create Master Secret */}
+        {/* Step 1: Create Encryption Passphrase */}
         {step === 1 && (
           <div className="p-6 space-y-4">
             <div className="rounded-lg bg-primary/5 border border-primary/15 p-3 text-xs text-foreground/80 space-y-1">
-              <p className="font-semibold text-primary">Zero-Knowledge Guarantee</p>
+              <p className="font-semibold text-primary">Private & Protected</p>
               <p className="text-muted-foreground leading-relaxed">
-                Your passphrase is never sent to our servers. It stays in your browser memory and derives your encryption keys locally.
+                Your encryption passphrase stays private to you. Only you can unlock and read your screenplays.
               </p>
             </div>
 
             <div className="space-y-3 pt-1">
               <div className="space-y-1.5">
                 <Label htmlFor="master-passphrase" className="text-xs font-semibold">
-                  Master Encryption Passphrase
+                  Encryption Passphrase
                 </Label>
                 <div className="relative">
                   <Input
                     id="master-passphrase"
                     type={showSecret ? "text" : "password"}
-                    placeholder="Enter a strong passphrase (min. 8 characters)"
+                    placeholder="Enter your encryption passphrase (min. 8 characters)"
                     value={secret}
                     onChange={(e) => setSecret(e.target.value)}
                     className="pr-10 text-sm h-10"
@@ -186,12 +185,12 @@ export function EncryptionOnboardingModal({
 
               <div className="space-y-1.5">
                 <Label htmlFor="confirm-master-passphrase" className="text-xs font-semibold">
-                  Confirm Master Passphrase
+                  Confirm Encryption Passphrase
                 </Label>
                 <Input
                   id="confirm-master-passphrase"
                   type={showSecret ? "text" : "password"}
-                  placeholder="Repeat your passphrase"
+                  placeholder="Confirm your encryption passphrase"
                   value={confirmSecret}
                   onChange={(e) => setConfirmSecret(e.target.value)}
                   className="text-sm h-10"
@@ -222,12 +221,12 @@ export function EncryptionOnboardingModal({
           </div>
         )}
 
-        {/* Step 2: Emergency Recovery Kit */}
+        {/* Step 2: Recovery Code */}
         {step === 2 && (
           <div className="p-6 space-y-4">
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Emergency Recovery Code
+                Recovery Code
               </Label>
               <div className="p-3 bg-muted/60 border border-border rounded-lg flex items-center justify-between font-mono text-sm tracking-wider select-all font-bold text-foreground">
                 <span>{recoveryKey}</span>
@@ -252,15 +251,15 @@ export function EncryptionOnboardingModal({
                 className="w-full text-xs h-9 gap-2 border-border"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>{downloadedKit ? "Kit Downloaded (.txt)" : "Download Recovery Kit (.txt)"}</span>
+                <span>{downloadedKit ? "Code Downloaded (.txt)" : "Download Recovery Code (.txt)"}</span>
               </Button>
             </div>
 
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-300 flex gap-2">
               <div className="space-y-1">
-                <p className="font-semibold">⚠️ Cannot Be Recovered by Karu Support</p>
+                <p className="font-semibold">⚠️ Keep This Code Safe</p>
                 <p className="leading-relaxed text-[11px]">
-                  Because Karu uses zero-knowledge encryption, if you lose your passphrase and recovery code, your encrypted screenplays cannot be decrypted by anyone.
+                  If you forget your encryption passphrase, this recovery code is the only way to regain access to your screenplays.
                 </p>
               </div>
             </div>
@@ -273,7 +272,7 @@ export function EncryptionOnboardingModal({
                 className="mt-0.5"
               />
               <Label htmlFor="backup-confirm" className="text-xs text-muted-foreground leading-relaxed cursor-pointer select-none">
-                I have securely saved my Emergency Recovery Key in a safe location.
+                I have saved my Recovery Code in a safe place.
               </Label>
             </div>
 
@@ -299,7 +298,7 @@ export function EncryptionOnboardingModal({
                 className="text-xs h-9 gap-1.5 font-medium"
               >
                 {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>Activate Encryption</span>
+                <span>Protect Screenplays</span>
               </Button>
             </DialogFooter>
           </div>
@@ -310,9 +309,9 @@ export function EncryptionOnboardingModal({
           <div className="p-10 flex flex-col items-center justify-center space-y-4 text-center">
             <Loader2 className="w-10 h-10 animate-spin text-primary" />
             <div className="space-y-1">
-              <h3 className="font-semibold text-sm">Generating Zero-Knowledge Keys...</h3>
+              <h3 className="font-semibold text-sm">Securing Your Workspace...</h3>
               <p className="text-xs text-muted-foreground max-w-xs">
-                Executing 600,000 PBKDF2 iterations and establishing your cryptographic identity.
+                Setting up your encryption passphrase...
               </p>
             </div>
           </div>

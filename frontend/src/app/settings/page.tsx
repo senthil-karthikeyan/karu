@@ -12,8 +12,6 @@ import {
   Lock,
   KeyRound,
   Download,
-  ShieldCheck,
-  ShieldAlert,
   Keyboard,
   RotateCcw,
   AlertCircle,
@@ -32,6 +30,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
+import { ChangePassphraseModal } from "@/components/crypto/change-passphrase-modal";
 import { MainNav } from "@/components/navigation/main-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -385,6 +384,7 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
 
   const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
   const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+  const [changePassphraseModalOpen, setChangePassphraseModalOpen] = useState(false);
 
   useEffect(() => {
     fetchUserMetadata().catch(() => {});
@@ -638,34 +638,34 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
 
       {/* Security Tab */}
       <TabsContent value="security" className="space-y-6">
-        {/* Zero-Knowledge End-to-End Encryption Section */}
+        {/* Screenplay Protection & Encryption Card */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
                   <Lock className="h-4 w-4 text-primary" />
-                  Zero-Knowledge End-to-End Encryption (E2EE)
+                  Screenplay Protection &amp; Encryption
                 </CardTitle>
                 <CardDescription>
-                  Client-side AES-256-GCM encryption ensures only you can decrypt your screenplay drafts.
+                  Your screenplays are protected with encryption. Only you can unlock and read your scripts.
                 </CardDescription>
               </div>
               <div>
                 {isUnlocked ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    Unlocked &amp; Active
+                    <Lock className="w-3.5 h-3.5" />
+                    Protected
                   </span>
                 ) : userMetadata ? (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    Session Locked
+                    <Lock className="w-3.5 h-3.5" />
+                    Locked
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
                     <KeyRound className="w-3.5 h-3.5" />
-                    Not Configured
+                    Not Set Up
                   </span>
                 )}
               </div>
@@ -673,62 +673,108 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg border text-xs">
-              <div>
-                <p className="text-muted-foreground">Cipher Algorithm</p>
-                <p className="font-semibold text-foreground">AES-256-GCM (128-bit Auth Tag)</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Key Derivation</p>
-                <p className="font-semibold text-foreground">PBKDF2-SHA256 (600,000 rounds)</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Identity Architecture</p>
-                <p className="font-semibold text-foreground">ECDH P-256 (Zero-Knowledge)</p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2 pt-2">
-              {!userMetadata ? (
+            {!userMetadata ? (
+              <div className="p-4 rounded-lg border bg-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Protect Your Screenplays</p>
+                  <p className="text-xs text-muted-foreground">
+                    Set up an encryption passphrase to ensure only you can access your screenplays.
+                  </p>
+                </div>
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => setOnboardingModalOpen(true)}
-                  className="text-xs gap-1.5"
+                  className="text-xs gap-1.5 shrink-0"
                 >
                   <KeyRound className="h-3.5 w-3.5" />
-                  Enable Zero-Knowledge Encryption
+                  Set Up Encryption
                 </Button>
-              ) : !isUnlocked ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => setUnlockModalOpen(true)}
-                  className="text-xs gap-1.5"
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  Unlock Encryption Session
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    try {
-                      await useEncryptionStore.getState().regenerateRecoveryKit(user.email);
-                      toast.success("Emergency Recovery Kit regenerated and downloaded!");
-                    } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Failed to regenerate recovery kit");
-                    }
-                  }}
-                  className="text-xs gap-1.5"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Regenerate & Download Recovery Kit (.txt)
-                </Button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Status overview */}
+                <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/20">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Encryption Status
+                    </p>
+                    <p className="text-sm font-medium text-foreground">
+                      {isUnlocked
+                        ? "Your screenplays are protected with encryption."
+                        : "Your screenplays are locked. Enter your passphrase to unlock."}
+                    </p>
+                  </div>
+                  {!isUnlocked && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setUnlockModalOpen(true)}
+                      className="text-xs gap-1.5"
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                      Unlock Screenplays
+                    </Button>
+                  )}
+                </div>
+
+                {/* Encryption Passphrase row */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-lg border gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Encryption Passphrase
+                    </p>
+                    <p className="text-sm font-mono tracking-widest text-muted-foreground">
+                      ••••••••••••
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Used to unlock and decrypt your screenplays on your devices.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setChangePassphraseModalOpen(true)}
+                    className="text-xs gap-1.5 shrink-0"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    Change Encryption Passphrase
+                  </Button>
+                </div>
+
+                {/* Recovery Code row */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-lg border gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Recovery Code
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Use your recovery code if you forget your encryption passphrase.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={!isUnlocked}
+                    onClick={async () => {
+                      try {
+                        await useEncryptionStore.getState().regenerateRecoveryKit(user.email);
+                        toast.success("Recovery code downloaded successfully!");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Failed to download recovery code");
+                      }
+                    }}
+                    className="text-xs gap-1.5 shrink-0"
+                    title={!isUnlocked ? "Unlock screenplays first to download recovery code" : undefined}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download Recovery Code (.txt)
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -790,6 +836,11 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
           onOpenChange={setUnlockModalOpen}
           mode="unlock"
           userMetadata={userMetadata}
+        />
+
+        <ChangePassphraseModal
+          open={changePassphraseModalOpen}
+          onOpenChange={setChangePassphraseModalOpen}
         />
       </TabsContent>
     </Tabs>
