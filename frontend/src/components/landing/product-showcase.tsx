@@ -4,11 +4,12 @@ import Link from "next/link";
 import {
   FileText,
   LayoutTemplate,
-  Download,
   CheckCircle2,
   ArrowRight,
-  Printer,
-  FileCode,
+  Sparkles,
+  History,
+  Compass,
+  Gauge,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,21 +29,25 @@ export function ProductShowcase() {
               Designed specifically for the craft of screenwriting.
             </h2>
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-              No generic text editors or clunky word processors. Karu gives you instant formatting for scene headings, character cues, dialogue, parentheticals, and transitions.
+              No generic word processors or improvised templates. Karu provides an authentic physical 8.5&quot; × 11&quot; page canvas with industry-standard screenplay formatting and typography.
             </p>
 
             <ul className="space-y-3 text-xs sm:text-sm text-foreground/90">
               <li className="flex items-center gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                <span>Industry-standard Courier Prime 12pt typeface</span>
+                <span>Standard Courier Prime 12pt typeface with strict screenplay margins</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                <span>Instant Scene Navigator to jump across acts</span>
+                <span>Physical 8.5&quot; × 11&quot; page layout with real-time pagination</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
-                <span>Real-time page count, word count, and auto-save</span>
+                <span>Real-time statistics: live page count, scene count, and word count</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />
+                <span>Silent autosave with database revision tracking to prevent overwrites</span>
               </li>
             </ul>
 
@@ -55,14 +60,41 @@ export function ProductShowcase() {
           </div>
 
           <div className="lg:col-span-7">
-            <div className="rounded-xl border border-border bg-card p-4 shadow-xl">
-              <div className="rounded-lg bg-background p-6 font-screenplay text-xs leading-relaxed border border-border/60 shadow-xs space-y-3">
-                <h3 className="font-bold text-sm uppercase">1. INT. TRAIN STATION - NIGHT</h3>
-                <p>Steam hisses against cold iron girders. Rain lashes the arched glass ceiling.</p>
-                <p className="font-bold uppercase ml-[37%]">MEERA</p>
-                <p className="italic ml-[30%] text-muted-foreground">(whispering)</p>
-                <p className="ml-[20%] max-w-[60%]">Track nine. Exactly as the telegram said.</p>
-                <p className="text-right uppercase font-bold text-muted-foreground">CUT TO:</p>
+            <div className="rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xl space-y-4">
+              {/* Editor Header Bar Mock */}
+              <div className="flex items-center justify-between border-b border-border/60 pb-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-foreground">Screenplay Editor</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-muted-foreground">Courier Prime 12pt</span>
+                  <Badge variant="outline" className="text-[10px] bg-muted/40">Autosaved</Badge>
+                </div>
+              </div>
+
+              {/* Physical Page Simulation */}
+              <div className="rounded-xl bg-background p-6 sm:p-8 font-screenplay text-xs leading-relaxed border border-border/60 shadow-inner space-y-3">
+                <p className="text-right text-[10px] text-muted-foreground font-mono">1.</p>
+                <h3 className="font-bold text-sm uppercase text-foreground">1. INT. TRAIN STATION - NIGHT</h3>
+                <p className="text-foreground/90">
+                  Steam hisses against cold iron girders. Rain lashes the arched glass ceiling.
+                </p>
+                <p className="font-bold uppercase ml-[37%] text-foreground">MEERA</p>
+                <p className="italic ml-[31%] text-muted-foreground">(whispering)</p>
+                <p className="ml-[20%] max-w-[60%] text-foreground">
+                  Track nine. Exactly as the telegram said.
+                </p>
+                <p className="text-right uppercase font-bold text-muted-foreground pt-1">
+                  CUT TO:
+                </p>
+              </div>
+
+              {/* Footer Telemetry */}
+              <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground font-mono">
+                <span>Page 1 of 1</span>
+                <span>Scene 1</span>
+                <span>42 Words</span>
               </div>
             </div>
           </div>
@@ -70,33 +102,48 @@ export function ProductShowcase() {
       </section>
 
       {/* 2. Film Workspace Showcase */}
-      <section id="how-it-works" className="container mx-auto px-4 sm:px-8 max-w-6xl">
+      <section className="container mx-auto px-4 sm:px-8 max-w-6xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-7 order-2 lg:order-1">
-            <div className="rounded-xl border border-border bg-card p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b pb-3">
+            <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-xl space-y-5">
+              <div className="flex items-center justify-between border-b pb-4">
                 <div>
-                  <h4 className="font-bold text-base">Midnight Train</h4>
-                  <p className="text-xs text-muted-foreground">Thriller • Feature Film</p>
+                  <h4 className="font-bold text-lg text-foreground">The Phantom Signal</h4>
+                  <p className="text-xs text-muted-foreground">Sci-Fi Thriller • Feature Film</p>
                 </div>
-                <Badge variant="default" className="text-xs">In Progress</Badge>
+                <Badge variant="default" className="text-xs">Draft 1 (Active)</Badge>
               </div>
-              <p className="text-xs text-muted-foreground italic">
-                &ldquo;A detective travels through a series of mysterious events on a phantom train that appears only at midnight.&rdquo;
-              </p>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-foreground">Logline</p>
+                <p className="text-xs text-muted-foreground italic leading-relaxed">
+                  &ldquo;When a reclusive radio astronomer intercepts an impossible harmonic sequence from deep space, she must decode it before an approaching solar storm permanently silences the observatory.&rdquo;
+                </p>
+              </div>
+
+              {/* Centralized Telemetry Grid */}
               <div className="grid grid-cols-3 gap-3 pt-2 text-center text-xs">
-                <div className="p-2.5 rounded-lg bg-muted/60">
-                  <p className="font-bold text-sm">112</p>
-                  <p className="text-[10px] text-muted-foreground">Pages</p>
+                <div className="p-3 rounded-xl bg-muted/50 border border-border/50">
+                  <p className="font-bold text-base text-foreground">114</p>
+                  <p className="text-[11px] text-muted-foreground">Pages</p>
                 </div>
-                <div className="p-2.5 rounded-lg bg-muted/60">
-                  <p className="font-bold text-sm">24</p>
-                  <p className="text-[10px] text-muted-foreground">Scenes</p>
+                <div className="p-3 rounded-xl bg-muted/50 border border-border/50">
+                  <p className="font-bold text-base text-foreground">38</p>
+                  <p className="text-[11px] text-muted-foreground">Scenes</p>
                 </div>
-                <div className="p-2.5 rounded-lg bg-muted/60">
-                  <p className="font-bold text-sm">2,646</p>
-                  <p className="text-[10px] text-muted-foreground">Words</p>
+                <div className="p-3 rounded-xl bg-muted/50 border border-border/50">
+                  <p className="font-bold text-base text-foreground">22,410</p>
+                  <p className="text-[11px] text-muted-foreground">Words</p>
                 </div>
+              </div>
+
+              {/* Version History Checkpoint Callout */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-border/60 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <History className="h-4 w-4 text-primary" />
+                  <span>Version Milestone: <strong className="text-foreground">First Complete Draft</strong></span>
+                </div>
+                <span className="text-[10px] text-muted-foreground font-mono">Immutable Snapshot</span>
               </div>
             </div>
           </div>
@@ -110,51 +157,28 @@ export function ProductShowcase() {
               All your screenplay details in one cohesive hub.
             </h2>
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-              Keep your loglines, genres, screenplay stats, and personal activity timeline centralized. Everything you need to stay organized from page one to the final draft.
+              Keep your loglines, genres, screenplay stats, and version snapshots centralized. Everything you need to develop your film from page one to the final production draft.
             </p>
-          </div>
-        </div>
-      </section>
 
-      {/* 3. Export Showcase */}
-      <section className="container mx-auto px-4 sm:px-8 max-w-6xl">
-        <div className="rounded-2xl border border-border/80 bg-card p-8 sm:p-12 text-center space-y-8">
-          <div className="space-y-3 max-w-2xl mx-auto">
-            <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
-              <Download className="h-4 w-4" />
-              <span>Export Anywhere</span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-              Production-ready export in seconds.
-            </h2>
-            <p className="text-muted-foreground text-sm sm:text-base leading-relaxed">
-              Deliver your script directly to producers, directors, and readers in their preferred format.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto pt-2">
-            <div className="p-5 rounded-xl border border-border bg-background space-y-2 text-left">
-              <Printer className="h-5 w-5 text-primary mb-2" />
-              <h3 className="font-semibold text-sm">Industry PDF</h3>
-              <p className="text-xs text-muted-foreground">
-                Formatted with precise 8.5&quot; x 11&quot; margins and title pages.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-xl border border-border bg-background space-y-2 text-left">
-              <FileCode className="h-5 w-5 text-primary mb-2" />
-              <h3 className="font-semibold text-sm">Fountain (.fountain)</h3>
-              <p className="text-xs text-muted-foreground">
-                Plain-text markup compatible with all screenwriting software.
-              </p>
-            </div>
-
-            <div className="p-5 rounded-xl border border-border bg-background space-y-2 text-left">
-              <FileText className="h-5 w-5 text-primary mb-2" />
-              <h3 className="font-semibold text-sm">Plain Text (.txt)</h3>
-              <p className="text-xs text-muted-foreground">
-                Clean text backup with authentic dialogue spacing.
-              </p>
+            <div className="space-y-3 pt-1">
+              <div className="flex items-start gap-3 text-xs sm:text-sm">
+                <Compass className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <strong className="text-foreground">Scene Navigator:</strong> Jump straight to any scene or act in your script with instant outline synchronization.
+                </div>
+              </div>
+              <div className="flex items-start gap-3 text-xs sm:text-sm">
+                <Gauge className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <strong className="text-foreground">Screenplay Metrics:</strong> Live tracking of scenes, dialogue density, and physical page estimates.
+                </div>
+              </div>
+              <div className="flex items-start gap-3 text-xs sm:text-sm">
+                <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <div>
+                  <strong className="text-foreground">Distraction-Free Focus:</strong> Clean writing mode hides toolbar chrome so you can immerse in dialogue and story.
+                </div>
+              </div>
             </div>
           </div>
         </div>

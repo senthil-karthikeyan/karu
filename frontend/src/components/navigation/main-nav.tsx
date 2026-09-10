@@ -10,6 +10,8 @@ import {
   ChevronDown,
   LayoutDashboard,
   User,
+  Menu,
+  X,
 } from "lucide-react";
 import { useProjectsQuery } from "@/hooks/use-projects";
 import { useAuth } from "@/hooks/use-auth";
@@ -37,6 +39,7 @@ export function MainNav({ isPublic = false }: MainNavProps) {
   const { data: projects = [] } = useProjectsQuery();
   const { user, logout } = useAuth();
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const displayName = user?.name || user?.email || "Writer";
   const initials = displayName
@@ -52,6 +55,12 @@ export function MainNav({ isPublic = false }: MainNavProps) {
   const currentProject = projects.find((p) => p.id === currentProjectId);
 
   if (isPublic) {
+    const isHome = pathname === "/";
+    const productHref = isHome ? "#product" : "/#product";
+    const structureHref = isHome ? "#structure" : "/#structure";
+    const shortcutsHref = isHome ? "#shortcuts" : "/#shortcuts";
+    const securityHref = isHome ? "#security" : "/#security";
+
     return (
       <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
         <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8">
@@ -63,18 +72,44 @@ export function MainNav({ isPublic = false }: MainNavProps) {
             <span className="font-bold text-xl tracking-tight">karu</span>
           </Link>
 
-          {/* Public Nav Links */}
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-muted-foreground">
-            <a href="#product" className="transition-colors hover:text-foreground">
+          {/* Public Nav Links (Desktop) */}
+          <nav className="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-medium text-muted-foreground">
+            <Link
+              href={productHref}
+              className="transition-colors hover:text-foreground"
+            >
               Product
-            </a>
-            <a href="#how-it-works" className="transition-colors hover:text-foreground">
-              How it works
-            </a>
+            </Link>
+            <Link
+              href={structureHref}
+              className="transition-colors hover:text-foreground"
+            >
+              Structure
+            </Link>
+            <Link
+              href={shortcutsHref}
+              className="transition-colors hover:text-foreground"
+            >
+              Shortcuts
+            </Link>
+            <Link
+              href={securityHref}
+              className="transition-colors hover:text-foreground"
+            >
+              Protection
+            </Link>
+            <Link
+              href="/how-it-works"
+              className={`transition-colors hover:text-foreground ${
+                pathname === "/how-it-works" ? "text-foreground font-semibold" : ""
+              }`}
+            >
+              How It Works
+            </Link>
           </nav>
 
-          {/* Action CTAs */}
-          <div className="flex items-center gap-3">
+          {/* Action CTAs (Desktop) */}
+          <div className="hidden sm:flex items-center gap-3">
             <Link href="/login">
               <Button variant="ghost" size="sm" className="font-medium text-sm">
                 Login
@@ -86,7 +121,87 @@ export function MainNav({ isPublic = false }: MainNavProps) {
               </Button>
             </Link>
           </div>
+
+          {/* Mobile Menu Button */}
+          <div className="flex sm:hidden items-center gap-2">
+            <Link href="/dashboard">
+              <Button size="sm" className="rounded-full px-3 text-xs font-medium h-8">
+                Start Writing
+              </Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 p-0 text-muted-foreground"
+              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
         </div>
+
+        {/* Mobile Dropdown Menu */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden border-b border-border/80 bg-background/98 px-4 py-5 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+            <nav className="flex flex-col space-y-3 text-sm font-medium">
+              <Link
+                href={productHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                Product &amp; Editor
+              </Link>
+              <Link
+                href={structureHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                Screenplay Structure
+              </Link>
+              <Link
+                href={shortcutsHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                Keyboard Shortcuts
+              </Link>
+              <Link
+                href={securityHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                Screenplay Protection
+              </Link>
+              <Link
+                href="/how-it-works"
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                How It Works
+              </Link>
+              <Link
+                href="/privacy"
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              >
+                Privacy Policy
+              </Link>
+            </nav>
+            <div className="pt-2 border-t border-border flex flex-col gap-2">
+              <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="outline" className="w-full justify-center text-xs h-9">
+                  Login to Account
+                </Button>
+              </Link>
+              <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+                <Button className="w-full justify-center text-xs h-9 font-semibold">
+                  Start Writing Now
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
     );
   }

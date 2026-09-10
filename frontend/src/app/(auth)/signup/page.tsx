@@ -258,7 +258,10 @@ export default function SignUpPage() {
                   className="mt-0.5"
                 />
                 <Label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
-                  I agree to the <span className="underline">Terms of Service</span> and <span className="underline">Privacy Policy</span>.
+                  I agree to the <span className="underline">Terms of Service</span> and{" "}
+                  <Link href="/privacy" className="underline hover:text-foreground">
+                    Privacy Policy
+                  </Link>.
                 </Label>
               </div>
               {errors.agreed && (
