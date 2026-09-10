@@ -109,13 +109,13 @@ export function CreateProjectModal({
 
     if (!isUnlocked) {
       if (status === "NOT_CONFIGURED") {
-        toast.error("Encryption Setup Required", {
-          description: "You must configure zero-knowledge encryption before creating a project.",
+        toast.error("Protection Setup Required", {
+          description: "Set up an encryption passphrase to protect your screenplays before creating a project.",
         });
         setSetupModalOpen(true);
       } else {
-        toast.error("Studio Locked", {
-          description: "Please unlock your encryption session before creating a project.",
+        toast.error("Screenplays Locked", {
+          description: "Please enter your encryption passphrase to unlock before creating a project.",
         });
         setUnlockModalOpen(true);
       }
@@ -154,7 +154,7 @@ export function CreateProjectModal({
       }
 
       toast.success("Project created successfully!", {
-        description: `"${newProject.title}" workspace is ready and encrypted.`,
+        description: `"${newProject.title}" workspace is ready and protected.`,
       });
 
       setOpen(false);
@@ -165,7 +165,7 @@ export function CreateProjectModal({
       router.push(`/projects/${newProject.id}`);
     } catch (err: unknown) {
       toast.error("Failed to create project", {
-        description: err instanceof Error ? err.message : "An error occurred while creating project.",
+        description: err instanceof Error ? err.message : "An error occurred",
       });
     }
   };
@@ -173,14 +173,11 @@ export function CreateProjectModal({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger && <DialogTrigger render={trigger as React.ReactElement} />}
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl flex items-center gap-2 font-semibold">
-            <Film className="h-5 w-5 text-primary" />
-            Create New Film Project
-          </DialogTitle>
+          <DialogTitle className="text-xl font-bold">Create New Screenplay Project</DialogTitle>
           <DialogDescription>
-            Set up your screenplay document and workspace details.
+            Start a new cinematic project with end-to-end encrypted screenplays.
           </DialogDescription>
         </DialogHeader>
 
@@ -190,13 +187,13 @@ export function CreateProjectModal({
               <p className="font-semibold flex items-center gap-1.5">
                 <span>🔒</span>
                 {status === "NOT_CONFIGURED"
-                  ? "Zero-Knowledge Encryption Required"
-                  : "Encryption Session Locked"}
+                  ? "Protection Setup Required"
+                  : "Screenplays Locked"}
               </p>
               <p className="text-muted-foreground leading-relaxed">
                 {status === "NOT_CONFIGURED"
-                  ? "To protect your intellectual property, you must configure zero-knowledge encryption before creating projects."
-                  : "Please unlock your studio session with your passphrase to enable project creation."}
+                  ? "Set up an encryption passphrase to protect your screenplays before creating projects."
+                  : "Please enter your encryption passphrase to unlock before creating a project."}
               </p>
             </div>
             <Button

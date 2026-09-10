@@ -75,6 +75,10 @@ interface EncryptionState {
     recoveryCode: string,
     newPassphrase: string
   ) => Promise<{ uek: CryptoKey; metadata: UserEncryptionMetadata }>;
+  changePassphrase: (
+    currentPassphrase: string,
+    newPassphrase: string
+  ) => Promise<{ uek: CryptoKey; metadata: UserEncryptionMetadata }>;
   getScreenplayKey: (screenplayId: string) => CryptoKey | undefined;
   setScreenplayKey: (screenplayId: string, key: CryptoKey) => void;
   createAndWrapScreenplayKey: (
@@ -274,16 +278,16 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
       });
 
       return uek;
-    } catch (err: unknown) {
+    } catch {
       set({
         isUnlocked: false,
         status: "UNLOCK_FAILED",
         activeUEK: null,
         identityKeyPair: null,
         isLoading: false,
-        error: "Incorrect encryption password.",
+        error: "Incorrect encryption passphrase.",
       });
-      throw new Error("Incorrect encryption password.");
+      throw new Error("Incorrect encryption passphrase.");
     }
   },
 
@@ -425,6 +429,103 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
     }
   },
 
+  /**
+   * Changes encryption passphrase by re-wrapping the user's private key with a new UEK:
+   * 1. Verifies currentPassphrase derives the active private key.
+   * 2. Generates fresh salt and derives new UEK from newPassphrase.
+   * 3. Re-wraps private key and persists updated encryption keys to backend.
+   */
+  changePassphrase: async (currentPassphrase: string, newPassphrase: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      if (!currentPassphrase || currentPassphrase.length < 8) {
+        throw new Error("Incorrect encryption passphrase.");
+      }
+      if (!newPassphrase || newPassphrase.length < 8) {
+        throw new Error("New encryption passphrase must be at least 8 characters long.");
+      }
+
+      const keysPayload = await authApi.getEncryptionKeys();
+      if (!keysPayload || !keysPayload.encryptedPrivateKey || !keysPayload.keyIv) {
+        throw new Error("Encryption is not configured yet.");
+      }
+
+      // Verify current passphrase by deriving UEK and unwrapping existing private key
+      let privateKey: CryptoKey;
+      try {
+        const currentUEK = await deriveUserEncryptionKey(currentPassphrase, keysPayload.salt, {
+          iterations: keysPayload.iterations,
+        });
+        privateKey = await unwrapUserPrivateKeyWithUEK(currentUEK, {
+          version: CURRENT_ENCRYPTION_VERSION,
+          algorithm: (keysPayload.algorithm as "AES-GCM") || "AES-GCM",
+          iv: keysPayload.keyIv,
+          wrappedKey: keysPayload.encryptedPrivateKey,
+        });
+      } catch {
+        throw new Error("Incorrect encryption passphrase.");
+      }
+
+      // Generate new salt and derive new UEK
+      const newSaltBytes = generateSalt();
+      const newSaltBase64 = uint8ArrayToBase64(newSaltBytes);
+      const newMetadata: UserEncryptionMetadata = {
+        version: CURRENT_ENCRYPTION_VERSION,
+        salt: newSaltBase64,
+        iterations: DEFAULT_PBKDF2_ITERATIONS,
+        hash: "SHA-256",
+      };
+
+      const newUEK = await deriveUserEncryptionKey(newPassphrase, newMetadata.salt, {
+        iterations: newMetadata.iterations,
+      });
+
+      // Wrap private key with new UEK
+      const wrappedPrivateKey = await wrapUserPrivateKeyWithUEK(newUEK, privateKey);
+
+      // Reconstruct public key
+      let publicKey: CryptoKey | null = null;
+      if (keysPayload.publicKey) {
+        publicKey = await window.crypto.subtle.importKey(
+          "spki",
+          base64ToUint8Array(keysPayload.publicKey) as BufferSource,
+          { name: "ECDH", namedCurve: "P-256" },
+          true,
+          []
+        );
+      }
+
+      // Save updated keys to backend
+      await authApi.setEncryptionKeys({
+        version: CURRENT_ENCRYPTION_VERSION,
+        salt: newMetadata.salt,
+        iterations: newMetadata.iterations,
+        hashAlgorithm: newMetadata.hash,
+        publicKey: keysPayload.publicKey,
+        encryptedPrivateKey: wrappedPrivateKey.wrappedKey,
+        keyIv: wrappedPrivateKey.iv,
+        algorithm: keysPayload.algorithm || "ECDH-P256",
+      });
+
+      // Update in-memory state
+      set({
+        isUnlocked: true,
+        status: "UNLOCKED",
+        activeUEK: newUEK,
+        identityKeyPair: publicKey ? { publicKey, privateKey } : null,
+        userMetadata: newMetadata,
+        isLoading: false,
+        error: null,
+      });
+
+      return { uek: newUEK, metadata: newMetadata };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to change encryption passphrase.";
+      set({ error: msg, isLoading: false });
+      throw new Error(msg);
+    }
+  },
+
   getScreenplayKey: (screenplayId: string) => {
     return get().screenplayKeys[screenplayId];
   },
@@ -444,7 +545,7 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   createAndWrapScreenplayKey: async (screenplayId: string) => {
     const { activeUEK } = get();
     if (!activeUEK) {
-      throw new Error("Encryption is locked. Please unlock with your encryption secret first.");
+      throw new Error("Encryption is locked. Please enter your encryption passphrase to unlock.");
     }
 
     const sck = await generateScreenplayContentKey();
@@ -541,7 +642,7 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
     } else {
       // Unwrapping via direct owner UEK
       if (!activeUEK) {
-        throw new Error("Encryption is locked. Please unlock with your encryption secret first.");
+        throw new Error("Encryption is locked. Please enter your encryption passphrase to unlock.");
       }
       const wrappedKey: WrappedKeyPayload = {
         version: CURRENT_ENCRYPTION_VERSION,
@@ -571,7 +672,7 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   ) => {
     const { activeUEK } = get();
     if (!activeUEK) {
-      throw new Error("Encryption is locked. Please unlock with your encryption secret first.");
+      throw new Error("Encryption is locked. Please enter your encryption passphrase to unlock.");
     }
 
     const sck = await unwrapScreenplayContentKeyWithUEK(activeUEK, wrappedKey);

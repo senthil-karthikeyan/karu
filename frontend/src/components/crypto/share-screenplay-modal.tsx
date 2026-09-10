@@ -104,7 +104,7 @@ export function ShareScreenplayModal({
     }
 
     if (!isUnlocked || !sck) {
-      setError("Your encryption session is locked. Please unlock first to share.");
+      setError("Encryption is locked. Please enter your encryption passphrase to unlock before sharing.");
       return;
     }
 
@@ -129,13 +129,13 @@ export function ShareScreenplayModal({
         pubKeyResp = await authApi.getUserPublicKey(recipient.id);
       } catch {
         throw new Error(
-          `User "${targetEmail}" has not activated Zero-Knowledge Encryption yet.`
+          `User "${targetEmail}" has not set up screenplay encryption yet.`
         );
       }
 
       if (!pubKeyResp || !pubKeyResp.publicKey) {
         throw new Error(
-          `User "${targetEmail}" has not activated Zero-Knowledge Encryption yet.`
+          `User "${targetEmail}" has not set up screenplay encryption yet.`
         );
       }
 
@@ -154,7 +154,7 @@ export function ShareScreenplayModal({
       });
 
       toast.success(`Screenplay shared with ${targetEmail}!`, {
-        description: `Granted ${role} role with end-to-end encrypted key wrapping.`,
+        description: `Granted ${role} role. Screenplay is securely shared.`,
       });
 
       setEmail("");
@@ -194,7 +194,7 @@ export function ShareScreenplayModal({
                 Share Screenplay
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                {screenplayTitle} • End-to-End Encrypted Collaboration
+                {screenplayTitle} • Protected Collaboration
               </DialogDescription>
             </div>
           </div>
@@ -293,9 +293,8 @@ export function ShareScreenplayModal({
               <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 flex gap-2.5 text-xs text-emerald-700 dark:text-emerald-300">
                 <Shield className="w-4 h-4 shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  The screenplay content key will be safely wrapped using ECIES
-                  (NIST P-256 ECDH + AES-GCM) under the recipient&apos;s public
-                  key. The server never sees the raw key.
+                  Your screenplay will be securely shared directly with the recipient.
+                  Only they can unlock and view your script.
                 </p>
               </div>
 

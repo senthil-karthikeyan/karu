@@ -45,17 +45,17 @@ export function EncryptionBadge({ screenplayId, className }: EncryptionBadgeProp
               {isScreenplayReady ? (
                 <>
                   <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                  <span>E2EE Protected</span>
+                  <span>Protected</span>
                 </>
               ) : isNotConfigured ? (
                 <>
                   <Unlock className="w-3 h-3 text-muted-foreground" />
-                  <span>E2EE Unconfigured</span>
+                  <span>Not Set Up</span>
                 </>
               ) : (
                 <>
-                  <Unlock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                  <span>E2EE Locked</span>
+                  <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  <span>Locked</span>
                 </>
               )}
             </Badge>
@@ -66,26 +66,26 @@ export function EncryptionBadge({ screenplayId, className }: EncryptionBadgeProp
             {isScreenplayReady ? (
               <>
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                <span>Zero-Knowledge Encryption Active</span>
+                <span>Screenplay Protected</span>
               </>
             ) : isNotConfigured ? (
               <>
                 <ShieldAlert className="w-4 h-4 text-muted-foreground" />
-                <span>Encryption Not Configured</span>
+                <span>Protection Not Set Up</span>
               </>
             ) : (
               <>
                 <ShieldAlert className="w-4 h-4 text-amber-500" />
-                <span>Encryption Session Locked</span>
+                <span>Screenplay Locked</span>
               </>
             )}
           </div>
           <p className="text-muted-foreground leading-relaxed">
             {isScreenplayReady
-              ? "Content is encrypted client-side using AES-GCM (256-bit). Only your browser holds the decryption keys."
+              ? "Your screenplay is protected with encryption."
               : isNotConfigured
-                ? "Zero-knowledge encryption has not been configured yet. Set up encryption to start writing screenplays."
-                : "Enter your encryption secret to unlock and edit this screenplay."}
+                ? "Set up an encryption passphrase to protect your screenplays."
+                : "Enter your encryption passphrase to unlock and access this screenplay."}
           </p>
         </TooltipContent>
       </Tooltip>

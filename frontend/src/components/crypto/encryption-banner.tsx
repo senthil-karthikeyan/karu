@@ -34,12 +34,9 @@ export function EncryptionBanner() {
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span className="font-medium">
-            Zero-Knowledge E2EE Active — Your screenplays are encrypted with client-side AES-256-GCM.
+            Your screenplays are protected.
           </span>
         </div>
-        <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-mono">
-          Keys in Memory
-        </span>
       </div>
     );
   }
@@ -53,10 +50,10 @@ export function EncryptionBanner() {
             <KeyRound className="w-4 h-4 text-primary shrink-0 mt-0.5" />
             <div className="space-y-0.5">
               <p className="font-semibold text-foreground">
-                Set up Zero-Knowledge Encryption
+                Protect Your Screenplays
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                Protect your creative intellectual property. Only your browser holds the decryption keys.
+                Set up an encryption passphrase to protect your screenplays.
               </p>
             </div>
           </div>
@@ -66,7 +63,7 @@ export function EncryptionBanner() {
             className="h-8 text-xs font-medium gap-1.5 shrink-0"
           >
             <Lock className="w-3 h-3" />
-            <span>Enable Encryption</span>
+            <span>Set Up Encryption</span>
           </Button>
         </div>
 
@@ -86,15 +83,15 @@ export function EncryptionBanner() {
           <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <p className="font-semibold text-amber-950 dark:text-amber-100 flex items-center gap-2">
-              <span>Encryption Session Locked</span>
+              <span>Screenplays Locked</span>
               {status === "UNLOCK_FAILED" && (
                 <span className="text-[11px] font-normal text-destructive bg-destructive/10 px-1.5 py-0.5 rounded border border-destructive/20">
-                  Incorrect password
+                  Incorrect encryption passphrase
                 </span>
               )}
             </p>
             <p className="text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
-              Enter your master encryption passphrase to decrypt and edit your screenplays.
+              Enter your encryption passphrase to unlock your screenplays.
             </p>
           </div>
         </div>
@@ -105,7 +102,7 @@ export function EncryptionBanner() {
           className="h-8 text-xs font-medium gap-1.5 border-amber-500/30 hover:bg-amber-500/20 shrink-0"
         >
           <Unlock className="w-3 h-3" />
-          <span>Unlock Studio</span>
+          <span>Unlock Screenplays</span>
         </Button>
       </div>
 

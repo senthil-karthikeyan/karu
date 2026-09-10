@@ -386,9 +386,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           if (!mounted) return;
           console.error("Failed to decrypt initial content:", err);
           setDecryptionError(
-            `AES-GCM decryption failed (content may be corrupted or encryption key is incorrect): ${
-              err instanceof Error ? err.message : "Authentication tag verification failed"
-            }`
+            "Unable to open screenplay. Please verify your encryption passphrase."
           );
         } finally {
           if (mounted) {
@@ -759,10 +757,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1">
                         <h3 className="font-semibold text-base text-foreground">
-                          Initializing Encryption
+                          Opening Screenplay
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          Verifying cryptographic session and keys...
+                          Opening screenplay...
                         </p>
                       </div>
                     </>
@@ -773,11 +771,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1.5">
                         <h3 className="font-semibold text-base text-foreground">
-                          Zero-Knowledge Encryption Required
+                          Protection Required
                         </h3>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          This screenplay is protected with client-side end-to-end encryption.
-                          Set up your encryption passphrase to activate zero-knowledge protection and begin writing.
+                          Set up an encryption passphrase to protect your screenplay and begin writing.
                         </p>
                       </div>
                       <Button
@@ -796,14 +793,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1.5">
                         <h3 className="font-semibold text-base text-foreground">
-                          Incorrect Encryption Password
+                          Incorrect Encryption Passphrase
                         </h3>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          The encryption password entered could not decrypt your private key.
-                          Please enter your correct password to unlock this screenplay.
+                          Incorrect encryption passphrase. Please try again.
                         </p>
                         <div className="bg-destructive/10 text-destructive text-xs py-2 px-3 rounded-md font-medium">
-                          Incorrect encryption password.
+                          Incorrect encryption passphrase.
                         </div>
                       </div>
                       <Button
@@ -823,11 +819,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1.5">
                         <h3 className="font-semibold text-base text-foreground">
-                          Screenplay Is Encrypted & Locked
+                          Screenplay Locked
                         </h3>
                         <p className="text-xs text-muted-foreground leading-relaxed">
-                          Your screenplay content is encrypted with AES-256-GCM.
-                          Enter your encryption passphrase to decrypt the content and begin editing.
+                          Enter your encryption passphrase to unlock your screenplay.
                         </p>
                       </div>
                       <Button
@@ -846,7 +841,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1.5">
                         <h3 className="font-semibold text-base text-foreground">
-                          Decryption Failed
+                          Unable to Open Screenplay
                         </h3>
                         <p className="text-xs text-muted-foreground leading-relaxed">
                           {decryptionError}
@@ -885,10 +880,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1">
                         <h3 className="font-semibold text-base text-foreground">
-                          Decrypting Screenplay Content
+                          Opening Screenplay...
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          Decrypting scenes and dialogue with verified screenplay key...
+                          Loading screenplay content...
                         </p>
                       </div>
                     </>
@@ -899,10 +894,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
                       </div>
                       <div className="space-y-1">
                         <h3 className="font-semibold text-base text-foreground">
-                          Unwrapping Screenplay Key
+                          Opening Screenplay...
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          Decrypting screenplay session key with your master key...
+                          Unlocking screenplay...
                         </p>
                       </div>
                     </>
@@ -930,15 +925,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           <span className="capitalize font-mono font-medium px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
             {activeElementType.replace("-", " ")}
           </span>
-          {isReadyToEdit ? (
-            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[10px]">
-              <span>🔒</span> E2EE Protected
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
-              <span>🔓</span> E2EE Locked
-            </span>
-          )}
         </div>
       </footer>
 

@@ -70,7 +70,7 @@ export async function deriveRecoveryWrappingKey(
 ): Promise<CryptoKey> {
   const normalized = normalizeRecoveryKey(recoveryCode);
   if (!normalized) {
-    throw new Error("Emergency Recovery Code is required.");
+    throw new Error("Recovery Code is required.");
   }
 
   const subtle = getSubtleCrypto();
@@ -189,33 +189,31 @@ export function generateRecoveryKitDocument(options: {
   const dateStr = options.createdAt || new Date().toUTCString();
 
   return `================================================================================
-                    KARU ZERO-KNOWLEDGE ENCRYPTION RECOVERY KIT
+                         KARU ENCRYPTION RECOVERY CODE
 ================================================================================
 
 Account Email : ${options.email}
 Generated At  : ${dateStr}
-Security Tier : Client-Side End-to-End Encryption (AES-256-GCM + PBKDF2)
 
 --------------------------------------------------------------------------------
-YOUR EMERGENCY RECOVERY CODE:
+YOUR RECOVERY CODE:
 --------------------------------------------------------------------------------
 
   ${options.recoveryKey}
 
 --------------------------------------------------------------------------------
-IMPORTANT SECURITY INSTRUCTIONS:
+IMPORTANT INSTRUCTIONS:
 --------------------------------------------------------------------------------
-1. Karu utilizes strict Zero-Knowledge End-to-End Encryption (E2EE).
-   Karu employees and servers DO NOT hold your master secret or encryption keys.
+1. Karu protects your screenplays with encryption.
+   Karu employees and servers DO NOT hold your encryption passphrase.
 
-2. If you forget your master encryption passphrase, this Emergency Recovery Code
-   is your ONLY method to regain access to your private encryption identity and
-   your encrypted screenplay drafts.
+2. If you forget your encryption passphrase, this Recovery Code is your safeguard
+   to regain access to your protected screenplays.
 
 3. Store this file securely:
-   - Print a physical copy and keep it in a safe place.
-   - Or store in an encrypted password manager.
-   - NEVER email or share this recovery code with anyone.
+   - Keep a copy in a safe place.
+   - Or store in a password manager.
+   - Never share this recovery code with anyone.
 
 ================================================================================
 `;

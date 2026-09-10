@@ -297,9 +297,9 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
               <Lock className="h-7 w-7" />
             </div>
             <div className="space-y-1.5">
-              <h2 className="text-xl font-bold tracking-tight">Screenplay Is Encrypted</h2>
+              <h2 className="text-xl font-bold tracking-tight">Screenplay Locked</h2>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                This screenplay is protected with End-to-End Encryption. Enter your encryption secret to decrypt and preview the formatted script.
+                This screenplay is protected. Enter your encryption passphrase to unlock and preview the script.
               </p>
             </div>
             <Button
