@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -12,34 +13,101 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { gsap, isReducedMotion, MOTION_CONFIG } from "@/lib/motion";
 
 export function LandingHero() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isReducedMotion() || !sectionRef.current) return;
+
+    const ctx = gsap.context(() => {
+      const distance = MOTION_CONFIG.getDistance();
+      const tl = gsap.timeline({ defaults: { ease: MOTION_CONFIG.ease } });
+
+      tl.from(".hero-badge", {
+        opacity: 0,
+        y: distance * 0.5,
+        duration: 0.6,
+      })
+        .from(
+          ".hero-headline",
+          {
+            opacity: 0,
+            y: distance,
+            duration: 0.8,
+          },
+          "-=0.4"
+        )
+        .from(
+          ".hero-subhead",
+          {
+            opacity: 0,
+            y: distance * 0.7,
+            duration: 0.7,
+          },
+          "-=0.5"
+        )
+        .from(
+          ".hero-cta",
+          {
+            opacity: 0,
+            y: distance * 0.5,
+            duration: 0.6,
+          },
+          "-=0.4"
+        )
+        .from(
+          ".hero-mockup",
+          {
+            opacity: 0,
+            y: distance * 1.2,
+            scale: 0.985,
+            duration: 0.9,
+          },
+          "-=0.3"
+        )
+        .from(
+          ".hero-pillar",
+          {
+            opacity: 0,
+            y: distance * 0.7,
+            stagger: 0.08,
+            duration: 0.6,
+          },
+          "-=0.4"
+        );
+    }, sectionRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section className="relative pt-12 pb-20 md:pt-20 md:pb-28 overflow-hidden">
+    <section ref={sectionRef} className="relative pt-12 pb-20 md:pt-20 md:pb-28 overflow-hidden">
       {/* Background radial glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-primary/5 blur-[120px] pointer-events-none rounded-full" />
 
       <div className="container mx-auto px-4 sm:px-8 max-w-6xl relative z-10 text-center space-y-8">
         {/* Top Tagline Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-border bg-muted/60 text-xs font-medium text-muted-foreground shadow-2xs backdrop-blur-xs">
+        <div className="hero-badge inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-border bg-muted/60 text-xs font-medium text-muted-foreground shadow-2xs backdrop-blur-xs">
           <Sparkles className="h-3.5 w-3.5 text-primary" />
           <span>Professional Screenwriting Studio</span>
         </div>
 
         {/* Main Headline */}
         <div className="space-y-4 max-w-3xl mx-auto">
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-foreground leading-[1.08]">
+          <h1 className="hero-headline text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-foreground leading-[1.08]">
             Write Your Story.
             <br />
             <span className="text-muted-foreground">Build Your Film.</span>
           </h1>
-          <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="hero-subhead text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Karu gives filmmakers a focused workspace to write, structure, and develop screenplays with professional screenplay formatting and a secure writing environment.
           </p>
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        <div className="hero-cta flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <Link href="/dashboard">
             <Button size="lg" className="rounded-full px-8 font-semibold text-sm shadow-md gap-2 h-12">
               <span>Start Writing</span>
@@ -59,7 +127,7 @@ export function LandingHero() {
         </div>
 
         {/* Hero Visual: Authentic Karu Screenplay Studio Mockup */}
-        <div className="pt-8 max-w-5xl mx-auto">
+        <div className="hero-mockup pt-8 max-w-5xl mx-auto">
           <div className="rounded-2xl border border-border/80 bg-card p-3 sm:p-5 shadow-2xl overflow-hidden relative text-left">
             {/* Window Chrome Header */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-border/60 bg-muted/40 rounded-t-xl mb-3 text-xs text-muted-foreground">
@@ -153,7 +221,7 @@ export function LandingHero() {
 
         {/* 4 Feature Pillars Grid (Accurate to implemented product) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 pt-10 text-left">
-          <div className="p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
+          <div className="hero-pillar p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-3">
               <FileText className="h-5 w-5" />
             </div>
@@ -163,7 +231,7 @@ export function LandingHero() {
             </p>
           </div>
 
-          <div className="p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
+          <div className="hero-pillar p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-3">
               <Layers className="h-5 w-5" />
             </div>
@@ -173,7 +241,7 @@ export function LandingHero() {
             </p>
           </div>
 
-          <div className="p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
+          <div className="hero-pillar p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-3">
               <Keyboard className="h-5 w-5" />
             </div>
@@ -183,7 +251,7 @@ export function LandingHero() {
             </p>
           </div>
 
-          <div className="p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
+          <div className="hero-pillar p-5 rounded-xl border border-border/60 bg-card space-y-2.5 shadow-2xs hover:border-border transition-colors">
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-3">
               <ShieldCheck className="h-5 w-5" />
             </div>

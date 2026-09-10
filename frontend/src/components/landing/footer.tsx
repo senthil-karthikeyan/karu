@@ -1,9 +1,35 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Link from "next/link";
+import { gsap, isReducedMotion } from "@/lib/motion";
 
 export function LandingFooter() {
+  const footerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isReducedMotion() || !footerRef.current) return;
+
+    const ctx = gsap.context(() => {
+      gsap.from(".footer-content", {
+        scrollTrigger: {
+          trigger: footerRef.current,
+          start: "top 95%",
+          once: true,
+        },
+        opacity: 0,
+        y: 16,
+        duration: 0.7,
+        ease: "power2.out",
+      });
+    }, footerRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <footer className="border-t border-border bg-background py-12">
-      <div className="container mx-auto px-4 sm:px-8 max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-6">
+    <footer ref={footerRef} className="border-t border-border bg-background py-12">
+      <div className="footer-content container mx-auto px-4 sm:px-8 max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-6">
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground font-black text-xs">
             K

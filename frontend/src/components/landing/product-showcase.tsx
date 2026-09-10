@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   FileText,
@@ -13,14 +14,81 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { gsap, isReducedMotion, MOTION_CONFIG } from "@/lib/motion";
 
 export function ProductShowcase() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const section1Ref = useRef<HTMLElement>(null);
+  const section2Ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isReducedMotion() || !containerRef.current) return;
+
+    const ctx = gsap.context(() => {
+      const distance = MOTION_CONFIG.getDistance();
+
+      // Section 1: Screenplay Editor Craft
+      if (section1Ref.current) {
+        gsap.timeline({
+          scrollTrigger: {
+            trigger: section1Ref.current,
+            start: "top 82%",
+            once: true,
+          },
+          defaults: { ease: MOTION_CONFIG.ease },
+        })
+          .from(".showcase-text-1", {
+            opacity: 0,
+            y: distance,
+            duration: 0.8,
+          })
+          .from(
+            ".showcase-card-1",
+            {
+              opacity: 0,
+              y: distance * 1.2,
+              duration: 0.85,
+            },
+            "-=0.4"
+          );
+      }
+
+      // Section 2: Film Workspace Hub
+      if (section2Ref.current) {
+        gsap.timeline({
+          scrollTrigger: {
+            trigger: section2Ref.current,
+            start: "top 82%",
+            once: true,
+          },
+          defaults: { ease: MOTION_CONFIG.ease },
+        })
+          .from(".showcase-card-2", {
+            opacity: 0,
+            y: distance * 1.2,
+            duration: 0.85,
+          })
+          .from(
+            ".showcase-text-2",
+            {
+              opacity: 0,
+              y: distance,
+              duration: 0.8,
+            },
+            "-=0.4"
+          );
+      }
+    }, containerRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <div id="product" className="space-y-24 py-16 border-t border-border/60">
+    <div ref={containerRef} id="product" className="space-y-24 py-16 border-t border-border/60">
       {/* 1. Screenplay Editor Showcase */}
-      <section className="container mx-auto px-4 sm:px-8 max-w-6xl">
+      <section ref={section1Ref} className="container mx-auto px-4 sm:px-8 max-w-6xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-5 space-y-6">
+          <div className="showcase-text-1 lg:col-span-5 space-y-6">
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
               <FileText className="h-4 w-4" />
               <span>Screenplay Editor</span>
@@ -59,7 +127,7 @@ export function ProductShowcase() {
             </Link>
           </div>
 
-          <div className="lg:col-span-7">
+          <div className="showcase-card-1 lg:col-span-7">
             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xl space-y-4">
               {/* Editor Header Bar Mock */}
               <div className="flex items-center justify-between border-b border-border/60 pb-3 text-xs text-muted-foreground">
@@ -102,9 +170,9 @@ export function ProductShowcase() {
       </section>
 
       {/* 2. Film Workspace Showcase */}
-      <section className="container mx-auto px-4 sm:px-8 max-w-6xl">
+      <section ref={section2Ref} className="container mx-auto px-4 sm:px-8 max-w-6xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          <div className="lg:col-span-7 order-2 lg:order-1">
+          <div className="showcase-card-2 lg:col-span-7 order-2 lg:order-1">
             <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-xl space-y-5">
               <div className="flex items-center justify-between border-b pb-4">
                 <div>
@@ -148,7 +216,7 @@ export function ProductShowcase() {
             </div>
           </div>
 
-          <div className="lg:col-span-5 order-1 lg:order-2 space-y-6">
+          <div className="showcase-text-2 lg:col-span-5 order-1 lg:order-2 space-y-6">
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
               <LayoutTemplate className="h-4 w-4" />
               <span>Film Workspace</span>

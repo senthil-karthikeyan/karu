@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Layers, CornerDownLeft, Sparkles, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { gsap, isReducedMotion, MOTION_CONFIG } from "@/lib/motion";
 
 const STRUCTURE_ELEMENTS = [
   {
@@ -49,11 +51,56 @@ const STRUCTURE_ELEMENTS = [
 ];
 
 export function ScreenplayStructure() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isReducedMotion() || !sectionRef.current) return;
+
+    const ctx = gsap.context(() => {
+      const distance = MOTION_CONFIG.getDistance();
+
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top 80%",
+          once: true,
+        },
+        defaults: { ease: MOTION_CONFIG.ease },
+      })
+        .from(".structure-header", {
+          opacity: 0,
+          y: distance,
+          duration: 0.75,
+        })
+        .from(
+          ".structure-card",
+          {
+            opacity: 0,
+            y: distance,
+            stagger: 0.08,
+            duration: 0.65,
+          },
+          "-=0.3"
+        )
+        .from(
+          ".structure-banner",
+          {
+            opacity: 0,
+            y: distance * 0.8,
+            duration: 0.75,
+          },
+          "-=0.2"
+        );
+    }, sectionRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section id="structure" className="py-20 border-t border-border/60 bg-muted/20">
+    <section ref={sectionRef} id="structure" className="py-20 border-t border-border/60 bg-muted/20">
       <div className="container mx-auto px-4 sm:px-8 max-w-6xl space-y-12">
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto space-y-4">
+        <div className="structure-header text-center max-w-2xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
             <Layers className="h-4 w-4" />
             <span>Screenplay Structure</span>
@@ -71,7 +118,7 @@ export function ScreenplayStructure() {
           {STRUCTURE_ELEMENTS.map((el) => (
             <div
               key={el.type}
-              className="p-5 rounded-2xl border border-border/80 bg-card shadow-xs hover:shadow-md transition-shadow space-y-3 flex flex-col justify-between"
+              className="structure-card p-5 rounded-2xl border border-border/80 bg-card shadow-xs hover:shadow-md transition-shadow space-y-3 flex flex-col justify-between"
             >
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -116,7 +163,7 @@ export function ScreenplayStructure() {
         </div>
 
         {/* Context-Aware Flow Banner */}
-        <div className="p-6 sm:p-8 rounded-2xl border border-border/80 bg-card shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="structure-banner p-6 sm:p-8 rounded-2xl border border-border/80 bg-card shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary">
               <Sparkles className="h-4 w-4" />

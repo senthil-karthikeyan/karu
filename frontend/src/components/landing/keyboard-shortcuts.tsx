@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Keyboard, Sliders, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { gsap, isReducedMotion, MOTION_CONFIG } from "@/lib/motion";
 
 const PRIMARY_SHORTCUTS = [
   { element: "Scene Heading", mac: "⌘⌥1", win: "Ctrl+Alt+1", desc: "Create a new slugline (INT./EXT.)" },
@@ -19,11 +21,66 @@ const STRUCTURAL_FLOWS = [
 ];
 
 export function KeyboardShortcuts() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isReducedMotion() || !sectionRef.current) return;
+
+    const ctx = gsap.context(() => {
+      const distance = MOTION_CONFIG.getDistance();
+
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top 80%",
+          once: true,
+        },
+        defaults: { ease: MOTION_CONFIG.ease },
+      })
+        .from(".shortcuts-header", {
+          opacity: 0,
+          y: distance,
+          duration: 0.75,
+        })
+        .from(
+          ".shortcut-card",
+          {
+            opacity: 0,
+            y: distance * 0.8,
+            stagger: 0.07,
+            duration: 0.6,
+          },
+          "-=0.3"
+        )
+        .from(
+          ".structural-flow-card",
+          {
+            opacity: 0,
+            y: distance * 0.7,
+            stagger: 0.08,
+            duration: 0.6,
+          },
+          "-=0.2"
+        )
+        .from(
+          ".customization-panel",
+          {
+            opacity: 0,
+            y: distance * 1.1,
+            duration: 0.85,
+          },
+          "-=0.5"
+        );
+    }, sectionRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section id="shortcuts" className="py-20 border-t border-border/60">
+    <section ref={sectionRef} id="shortcuts" className="py-20 border-t border-border/60">
       <div className="container mx-auto px-4 sm:px-8 max-w-6xl space-y-12">
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto space-y-4">
+        <div className="shortcuts-header text-center max-w-2xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-primary">
             <Keyboard className="h-4 w-4" />
             <span>Keyboard First</span>
@@ -49,7 +106,7 @@ export function KeyboardShortcuts() {
               {PRIMARY_SHORTCUTS.map((item) => (
                 <div
                   key={item.element}
-                  className="p-4 rounded-xl border border-border/80 bg-card hover:border-border transition-colors flex items-center justify-between"
+                  className="shortcut-card p-4 rounded-xl border border-border/80 bg-card hover:border-border transition-colors flex items-center justify-between"
                 >
                   <div className="space-y-0.5">
                     <p className="text-xs font-semibold text-foreground">{item.element}</p>
@@ -71,7 +128,7 @@ export function KeyboardShortcuts() {
                 {STRUCTURAL_FLOWS.map((flow) => (
                   <div
                     key={flow.key}
-                    className="p-3.5 rounded-xl border border-border/60 bg-muted/30 flex items-center justify-between text-xs"
+                    className="structural-flow-card p-3.5 rounded-xl border border-border/60 bg-muted/30 flex items-center justify-between text-xs"
                   >
                     <div className="flex items-center gap-3">
                       <kbd className="px-2.5 py-1 rounded-md bg-card border border-border font-mono text-xs font-bold text-foreground shadow-2xs">
@@ -89,7 +146,7 @@ export function KeyboardShortcuts() {
           </div>
 
           {/* Customization Feature Card */}
-          <div className="lg:col-span-5 rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl space-y-6">
+          <div className="customization-panel lg:col-span-5 rounded-2xl border border-border/80 bg-card p-6 sm:p-8 shadow-xl space-y-6">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
               <Sliders className="h-5 w-5" />
             </div>

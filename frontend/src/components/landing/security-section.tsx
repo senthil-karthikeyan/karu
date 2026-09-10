@@ -1,15 +1,62 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { ShieldCheck, Lock, KeyRound, FileCheck, ArrowRight, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { gsap, isReducedMotion, MOTION_CONFIG } from "@/lib/motion";
 
 export function SecuritySection() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (isReducedMotion() || !sectionRef.current) return;
+
+    const ctx = gsap.context(() => {
+      const distance = MOTION_CONFIG.getDistance();
+
+      gsap.timeline({
+        scrollTrigger: {
+          trigger: sectionRef.current,
+          start: "top 80%",
+          once: true,
+        },
+        defaults: { ease: MOTION_CONFIG.ease },
+      })
+        .from(".security-header", {
+          opacity: 0,
+          y: distance,
+          duration: 0.75,
+        })
+        .from(
+          ".security-pillar",
+          {
+            opacity: 0,
+            y: distance * 0.9,
+            stagger: 0.1,
+            duration: 0.7,
+          },
+          "-=0.3"
+        )
+        .from(
+          ".security-banner",
+          {
+            opacity: 0,
+            y: distance * 0.8,
+            duration: 0.75,
+          },
+          "-=0.2"
+        );
+    }, sectionRef);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section id="security" className="py-20 border-t border-border/60 bg-muted/20">
+    <section ref={sectionRef} id="security" className="py-20 border-t border-border/60 bg-muted/20">
       <div className="container mx-auto px-4 sm:px-8 max-w-6xl space-y-12">
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto space-y-4">
+        <div className="security-header text-center max-w-2xl mx-auto space-y-4">
           <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
             <ShieldCheck className="h-4 w-4" />
             <span>Screenplay Protection</span>
@@ -25,7 +72,7 @@ export function SecuritySection() {
         {/* Protection Pillars */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Pillar 1: Encryption Passphrase */}
-          <div className="p-6 rounded-2xl border border-border/80 bg-card shadow-xs space-y-4">
+          <div className="security-pillar p-6 rounded-2xl border border-border/80 bg-card shadow-xs space-y-4">
             <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
               <KeyRound className="h-5 w-5" />
             </div>
@@ -38,7 +85,7 @@ export function SecuritySection() {
           </div>
 
           {/* Pillar 2: Client-Side Protection */}
-          <div className="p-6 rounded-2xl border border-border/80 bg-card shadow-xs space-y-4">
+          <div className="security-pillar p-6 rounded-2xl border border-border/80 bg-card shadow-xs space-y-4">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
               <Lock className="h-5 w-5" />
             </div>
@@ -51,7 +98,7 @@ export function SecuritySection() {
           </div>
 
           {/* Pillar 3: Recovery Code Safeguard */}
-          <div className="p-6 rounded-2xl border border-border/80 bg-card shadow-xs space-y-4">
+          <div className="security-pillar p-6 rounded-2xl border border-border/80 bg-card shadow-xs space-y-4">
             <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
               <FileCheck className="h-5 w-5" />
             </div>
@@ -65,7 +112,7 @@ export function SecuritySection() {
         </div>
 
         {/* Filmmaker Trust Banner */}
-        <div className="p-6 sm:p-8 rounded-2xl border border-border/80 bg-card shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="security-banner p-6 sm:p-8 rounded-2xl border border-border/80 bg-card shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
             <div className="flex items-center justify-center md:justify-start gap-2 text-xs font-semibold text-foreground">
               <EyeOff className="h-4 w-4 text-primary" />
