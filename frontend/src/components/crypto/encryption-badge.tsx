@@ -16,12 +16,16 @@ interface EncryptionBadgeProps {
 }
 
 export function EncryptionBadge({ screenplayId, className }: EncryptionBadgeProps) {
-  const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
+  const status = useEncryptionStore((state) => state.status);
+  const activeUEK = useEncryptionStore((state) => state.activeUEK);
   const screenplayKey = useEncryptionStore((state) =>
     screenplayId ? state.screenplayKeys[screenplayId] : undefined
   );
 
-  const isScreenplayReady = isUnlocked && (!screenplayId || !!screenplayKey);
+  const isScreenplayReady =
+    status === "UNLOCKED" && !!activeUEK && (!screenplayId || !!screenplayKey);
+
+  const isNotConfigured = status === "NOT_CONFIGURED";
 
   return (
     <TooltipProvider delay={200}>
@@ -33,13 +37,20 @@ export function EncryptionBadge({ screenplayId, className }: EncryptionBadgeProp
               className={`flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium cursor-default select-none border transition-colors ${
                 isScreenplayReady
                   ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15"
-                  : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/15"
+                  : isNotConfigured
+                    ? "bg-muted/60 text-muted-foreground border-border/80"
+                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 hover:bg-amber-500/15"
               } ${className || ""}`}
             >
               {isScreenplayReady ? (
                 <>
                   <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                   <span>E2EE Protected</span>
+                </>
+              ) : isNotConfigured ? (
+                <>
+                  <Unlock className="w-3 h-3 text-muted-foreground" />
+                  <span>E2EE Unconfigured</span>
                 </>
               ) : (
                 <>
@@ -57,6 +68,11 @@ export function EncryptionBadge({ screenplayId, className }: EncryptionBadgeProp
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
                 <span>Zero-Knowledge Encryption Active</span>
               </>
+            ) : isNotConfigured ? (
+              <>
+                <ShieldAlert className="w-4 h-4 text-muted-foreground" />
+                <span>Encryption Not Configured</span>
+              </>
             ) : (
               <>
                 <ShieldAlert className="w-4 h-4 text-amber-500" />
@@ -67,7 +83,9 @@ export function EncryptionBadge({ screenplayId, className }: EncryptionBadgeProp
           <p className="text-muted-foreground leading-relaxed">
             {isScreenplayReady
               ? "Content is encrypted client-side using AES-GCM (256-bit). Only your browser holds the decryption keys."
-              : "Enter your encryption secret to unlock and edit this screenplay."}
+              : isNotConfigured
+                ? "Zero-knowledge encryption has not been configured yet. Set up encryption to start writing screenplays."
+                : "Enter your encryption secret to unlock and edit this screenplay."}
           </p>
         </TooltipContent>
       </Tooltip>

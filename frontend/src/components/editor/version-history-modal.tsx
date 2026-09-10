@@ -49,7 +49,7 @@ export function VersionHistoryModal({
   const [showCreateInput, setShowCreateInput] = useState(false);
 
   const screenplayKey = useEncryptionStore(
-    (state) => state.screenplayKeys[screenplayId] || state.screenplayKeys[projectId]
+    (state) => (screenplayId ? state.screenplayKeys[screenplayId] : undefined)
   );
   const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
 
@@ -70,13 +70,22 @@ export function VersionHistoryModal({
   }, [screenplayId, selectedVersion]);
 
   useEffect(() => {
-    if (open) {
-      loadVersions();
-    } else {
-      setShowCreateInput(false);
-      setNewVersionTitle("");
-      setPreviewContent(null);
-    }
+    let mounted = true;
+    const init = async () => {
+      await Promise.resolve();
+      if (!mounted) return;
+      if (open) {
+        loadVersions();
+      } else {
+        setShowCreateInput(false);
+        setNewVersionTitle("");
+        setPreviewContent(null);
+      }
+    };
+    init();
+    return () => {
+      mounted = false;
+    };
   }, [open, loadVersions]);
 
   // Load and decrypt preview content when selected version changes

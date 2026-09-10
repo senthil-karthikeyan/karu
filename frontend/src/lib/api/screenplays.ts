@@ -10,6 +10,8 @@ import {
   encryptScreenplayContent,
   decryptScreenplayContent,
   parseEncryptedPayloadString,
+  isEmptyEncryptedPayload,
+  createEmptyScreenplayDoc,
 } from "@/lib/crypto";
 
 
@@ -190,14 +192,18 @@ export const screenplaysApi = {
     key: CryptoKey
   ): Promise<{ doc: TipTapDocumentJSON; revision: number; updatedAt: string }> {
     const resp = await this.getContent(id);
-    const parsedPayload = parseEncryptedPayloadString(resp.content);
+    if (isEmptyEncryptedPayload(resp.content)) {
+      return { doc: createEmptyScreenplayDoc(), revision: resp.revision, updatedAt: resp.updatedAt };
+    }
+    const contentStr = typeof resp.content === "string" ? resp.content : JSON.stringify(resp.content);
+    const parsedPayload = parseEncryptedPayloadString(contentStr);
     if (parsedPayload) {
       const doc = await decryptScreenplayContent(parsedPayload, key);
       return { doc, revision: resp.revision, updatedAt: resp.updatedAt };
     }
 
     try {
-      const parsed = JSON.parse(resp.content);
+      const parsed = JSON.parse(contentStr);
       if (parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).type === "doc") {
         return { doc: parsed as TipTapDocumentJSON, revision: resp.revision, updatedAt: resp.updatedAt };
       }
@@ -255,14 +261,18 @@ export const screenplaysApi = {
     key: CryptoKey
   ): Promise<{ version: ScreenplayVersionResponse; doc: TipTapDocumentJSON }> {
     const version = await this.getVersion(id, versionId);
-    const parsedPayload = parseEncryptedPayloadString(version.content);
+    if (isEmptyEncryptedPayload(version.content)) {
+      return { version, doc: createEmptyScreenplayDoc() };
+    }
+    const contentStr = typeof version.content === "string" ? version.content : JSON.stringify(version.content);
+    const parsedPayload = parseEncryptedPayloadString(contentStr);
     if (parsedPayload) {
       const doc = await decryptScreenplayContent(parsedPayload, key);
       return { version, doc };
     }
 
     try {
-      const parsed = JSON.parse(version.content);
+      const parsed = JSON.parse(contentStr);
       if (parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).type === "doc") {
         return { version, doc: parsed as TipTapDocumentJSON };
       }

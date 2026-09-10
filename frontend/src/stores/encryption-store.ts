@@ -27,8 +27,23 @@ import {
 } from "@/lib/crypto";
 import { authApi } from "@/lib/api/auth";
 import { screenplaysApi } from "@/lib/api/screenplays";
+import { ApiError } from "@/lib/api/client";
+
+// Module-level map to track in-flight screenplay key initializations across concurrent renders
+const inFlightScreenplayInitializations = new Map<string, Promise<CryptoKey>>();
+
+export type EncryptionStatus =
+  | "NOT_CONFIGURED" // User has no encryption keys/salt registered on the backend
+  | "LOCKED" // User has registered keys, but current browser session is locked
+  | "UNLOCKING" // Passphrase derivation and cryptographic unwrap verification in progress
+  | "UNLOCKED" // Verified UEK and private key successfully loaded in memory
+  | "UNLOCK_FAILED"; // Cryptographic verification failed (incorrect password)
 
 interface EncryptionState {
+  // Explicit state machine
+  status: EncryptionStatus;
+  isInitializing: boolean;
+
   // Ephemeral In-Memory State (NEVER persisted to disk/storage)
   isUnlocked: boolean;
   activeUEK: CryptoKey | null;
@@ -65,6 +80,9 @@ interface EncryptionState {
   createAndWrapScreenplayKey: (
     screenplayId: string
   ) => Promise<{ sck: CryptoKey; wrappedKey: WrappedKeyPayload }>;
+  initializeScreenplayKey: (
+    screenplayId: string
+  ) => Promise<CryptoKey>;
   loadAndUnlockScreenplayKey: (
     screenplayId: string
   ) => Promise<CryptoKey>;
@@ -76,6 +94,8 @@ interface EncryptionState {
 }
 
 export const useEncryptionStore = create<EncryptionState>((set, get) => ({
+  status: "LOCKED",
+  isInitializing: true,
   isUnlocked: false,
   activeUEK: null,
   identityKeyPair: null,
@@ -90,18 +110,25 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
   fetchUserMetadata: async () => {
     try {
       const resp = await authApi.getEncryptionKeys();
-      if (resp && resp.salt) {
+      if (resp && resp.salt && resp.encryptedPrivateKey) {
         const metadata: UserEncryptionMetadata = {
           version: CURRENT_ENCRYPTION_VERSION,
           salt: resp.salt,
           iterations: resp.iterations || DEFAULT_PBKDF2_ITERATIONS,
           hash: ((resp.hashAlgorithm || (resp as Record<string, unknown>).hash_algorithm) as "SHA-256") || "SHA-256",
         };
-        set({ userMetadata: metadata });
+        const currentStatus = get().status;
+        set({
+          userMetadata: metadata,
+          status: currentStatus === "UNLOCKED" ? "UNLOCKED" : "LOCKED",
+          isInitializing: false,
+        });
         return metadata;
       }
+      set({ userMetadata: null, status: "NOT_CONFIGURED", isInitializing: false });
       return null;
     } catch {
+      set({ userMetadata: null, status: "NOT_CONFIGURED", isInitializing: false });
       return null;
     }
   },
@@ -174,81 +201,89 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
 
       set({
         isUnlocked: true,
+        status: "UNLOCKED",
         activeUEK: uek,
         identityKeyPair,
         userMetadata: metadata,
         isLoading: false,
+        error: null,
       });
 
       return { uek, metadata, identityKeyPair, recoveryKey };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to setup encryption";
-      set({ error: msg, isLoading: false });
+      set({ error: msg, isLoading: false, status: "NOT_CONFIGURED", isUnlocked: false, activeUEK: null });
       throw new Error(msg);
     }
   },
 
   /**
    * Unlocks an existing user's session using their passphrase:
-   * 1. Re-derives active UEK using registered salt & iterations.
-   * 2. Fetches user identity payload and unwraps ECDH private key into memory.
-   * 3. Sets session to unlocked.
+   * 1. Re-derives active UEK using registered salt & iterations via PBKDF2.
+   * 2. Fetches user identity payload and cryptographically verifies candidate UEK
+   *    by unwrapping the stored ECDH-P256 private key via AES-256-GCM.
+   * 3. If unwrapping fails (wrong password), sets status to UNLOCK_FAILED and rejects with "Incorrect encryption password."
+   * 4. If unwrapping succeeds, sets status to UNLOCKED and stores UEK in memory.
    */
   unlockWithSecret: async (secret: string, metadata: UserEncryptionMetadata) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, status: "UNLOCKING", error: null });
 
     try {
       const uek = await deriveUserEncryptionKey(secret, metadata.salt, { iterations: metadata.iterations });
 
-      // Fetch and unwrap asymmetric identity keypair if available
-      let identityKeyPair: UserIdentityKeyPair | null = null;
-      try {
-        const keysPayload = await authApi.getEncryptionKeys();
-        if (keysPayload && keysPayload.encryptedPrivateKey && keysPayload.keyIv) {
-          const privateKey = await unwrapUserPrivateKeyWithUEK(uek, {
-            version: CURRENT_ENCRYPTION_VERSION,
-            algorithm: (keysPayload.algorithm as "AES-GCM") || "AES-GCM",
-            iv: keysPayload.keyIv,
-            wrappedKey: keysPayload.encryptedPrivateKey,
-          });
-
-          let publicKey: CryptoKey | null = null;
-          if (keysPayload.publicKey) {
-            const subtle = window.crypto.subtle;
-            const pubKeyBytes = base64ToUint8Array(keysPayload.publicKey);
-            publicKey = await subtle.importKey(
-              "spki",
-              pubKeyBytes as BufferSource,
-              {
-                name: "ECDH",
-                namedCurve: "P-256",
-              },
-              true,
-              []
-            );
-          }
-
-          if (publicKey && privateKey) {
-            identityKeyPair = { publicKey, privateKey };
-          }
-        }
-      } catch (idErr) {
-        console.warn("Could not unwrap encryption identity keypair:", idErr);
+      const keysPayload = await authApi.getEncryptionKeys();
+      if (!keysPayload || !keysPayload.encryptedPrivateKey || !keysPayload.keyIv) {
+        throw new Error("User encryption key material not found on server.");
       }
+
+      // Cryptographic verification: unwrap user's ECDH private key using candidate UEK.
+      // If candidate UEK is incorrect, AES-GCM tag verification fails and throws OperationError.
+      const privateKey = await unwrapUserPrivateKeyWithUEK(uek, {
+        version: CURRENT_ENCRYPTION_VERSION,
+        algorithm: (keysPayload.algorithm as "AES-GCM") || "AES-GCM",
+        iv: keysPayload.keyIv,
+        wrappedKey: keysPayload.encryptedPrivateKey,
+      });
+
+      let publicKey: CryptoKey | null = null;
+      if (keysPayload.publicKey) {
+        const subtle = window.crypto.subtle;
+        const pubKeyBytes = base64ToUint8Array(keysPayload.publicKey);
+        publicKey = await subtle.importKey(
+          "spki",
+          pubKeyBytes as BufferSource,
+          {
+            name: "ECDH",
+            namedCurve: "P-256",
+          },
+          true,
+          []
+        );
+      }
+
+      const identityKeyPair = publicKey ? { publicKey, privateKey } : null;
 
       set({
         isUnlocked: true,
+        status: "UNLOCKED",
         activeUEK: uek,
         identityKeyPair,
         userMetadata: metadata,
         isLoading: false,
+        error: null,
       });
 
       return uek;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to unlock encryption";
-      set({ error: msg, isLoading: false });
-      throw new Error(msg);
+      set({
+        isUnlocked: false,
+        status: "UNLOCK_FAILED",
+        activeUEK: null,
+        identityKeyPair: null,
+        isLoading: false,
+        error: "Incorrect encryption password.",
+      });
+      throw new Error("Incorrect encryption password.");
     }
   },
 
@@ -343,7 +378,7 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
 
       // Reconstruct or fetch public key SPKI
       const keysPayload = await authApi.getEncryptionKeys().catch(() => null);
-      let publicKeyBase64 = keysPayload?.publicKey;
+      const publicKeyBase64 = keysPayload?.publicKey;
       let publicKey: CryptoKey | null = null;
 
       if (publicKeyBase64) {
@@ -374,10 +409,12 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
 
       set({
         isUnlocked: true,
+        status: "UNLOCKED",
         activeUEK: newUEK,
         identityKeyPair: publicKey ? { publicKey, privateKey } : null,
         userMetadata: metadata,
         isLoading: false,
+        error: null,
       });
 
       return { uek: newUEK, metadata };
@@ -413,12 +450,8 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
     const sck = await generateScreenplayContentKey();
     const wrappedKey = await wrapScreenplayContentKeyWithUEK(activeUEK, sck);
 
-    // Persist wrapped SCK to backend
-    try {
-      await screenplaysApi.setScreenplayKey(screenplayId, wrappedKey);
-    } catch (apiErr) {
-      console.warn("Could not sync wrapped screenplay key to backend immediately:", apiErr);
-    }
+    // Persist wrapped SCK to backend - DO NOT swallow errors!
+    const backendKey = await screenplaysApi.setScreenplayKey(screenplayId, wrappedKey);
 
     set((state) => ({
       screenplayKeys: {
@@ -427,7 +460,56 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
       },
     }));
 
-    return { sck, wrappedKey };
+    return { sck, wrappedKey: backendKey || wrappedKey };
+  },
+
+  /**
+   * Initializes the screenplay encryption key with concurrency guard (single-flight)
+   * and automatic fallback to create-and-wrap if the key does not exist yet (404).
+   */
+  initializeScreenplayKey: async (screenplayId: string) => {
+    if (!screenplayId) {
+      throw new Error("Screenplay ID is required to initialize encryption key.");
+    }
+
+    // Check memory cache first
+    const cachedKey = get().screenplayKeys[screenplayId];
+    if (cachedKey) {
+      return cachedKey;
+    }
+
+    // Check in-flight promise to prevent concurrent calls (React StrictMode or multiple effects)
+    const existingPromise = inFlightScreenplayInitializations.get(screenplayId);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    const initPromise = (async () => {
+      try {
+        // Try loading existing key from backend
+        return await get().loadAndUnlockScreenplayKey(screenplayId);
+      } catch (err: unknown) {
+        const is404 =
+          (err instanceof ApiError && err.statusCode === 404) ||
+          (err && typeof err === "object" && "statusCode" in err && (err as { statusCode: number }).statusCode === 404) ||
+          (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 404) ||
+          (err instanceof Error && (err.message.includes("404") || err.message.includes("not found") || err.message.includes("NOT_FOUND")));
+
+        if (is404) {
+          // Key does not exist for this screenplay yet: generate, wrap with UEK, and persist
+          const { sck } = await get().createAndWrapScreenplayKey(screenplayId);
+          return sck;
+        }
+
+        // Rethrow other errors (e.g. 401, 403, 500, unwrap failure)
+        throw err;
+      }
+    })().finally(() => {
+      inFlightScreenplayInitializations.delete(screenplayId);
+    });
+
+    inFlightScreenplayInitializations.set(screenplayId, initPromise);
+    return initPromise;
   },
 
   /**
@@ -508,8 +590,10 @@ export const useEncryptionStore = create<EncryptionState>((set, get) => ({
    * Purges all active CryptoKeys, User Identity, and ephemeral encryption state from memory.
    */
   clearEncryptionSession: () => {
+    inFlightScreenplayInitializations.clear();
     set({
       isUnlocked: false,
+      status: "LOCKED",
       activeUEK: null,
       identityKeyPair: null,
       screenplayKeys: {},

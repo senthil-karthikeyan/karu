@@ -78,11 +78,19 @@ export function ShareScreenplayModal({
   };
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let mounted = true;
+    const init = async () => {
+      await Promise.resolve();
+      if (!mounted) return;
       setError(null);
       setEmail("");
       fetchCollaborators();
-    }
+    };
+    init();
+    return () => {
+      mounted = false;
+    };
   }, [open, screenplayId]);
 
   const handleShare = async (e: React.FormEvent) => {

@@ -8,14 +8,27 @@ import { EncryptionOnboardingModal } from "./encryption-onboarding-modal";
 import { EncryptionDialog } from "./encryption-dialog";
 
 export function EncryptionBanner() {
-  const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
+  const status = useEncryptionStore((state) => state.status);
+  const isInitializing = useEncryptionStore((state) => state.isInitializing);
   const userMetadata = useEncryptionStore((state) => state.userMetadata);
 
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
 
+  // If still checking encryption keys from server, render subtle loading state
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-between p-3.5 rounded-lg bg-muted/30 border border-border/60 animate-pulse text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded-full bg-muted-foreground/20" />
+          <span>Verifying encryption configuration...</span>
+        </div>
+      </div>
+    );
+  }
+
   // If already unlocked, render subtle green status pill
-  if (isUnlocked) {
+  if (status === "UNLOCKED") {
     return (
       <div className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-700 dark:text-emerald-300">
         <div className="flex items-center gap-2">
@@ -32,7 +45,7 @@ export function EncryptionBanner() {
   }
 
   // If user has not configured encryption metadata yet
-  if (!userMetadata) {
+  if (status === "NOT_CONFIGURED") {
     return (
       <>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-primary/5 border border-primary/20 text-xs">
@@ -65,15 +78,20 @@ export function EncryptionBanner() {
     );
   }
 
-  // If user has metadata but the session is currently locked
+  // If user has registered keys but session is currently locked or failed unlock
   return (
     <>
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200">
         <div className="flex items-start gap-2.5">
           <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
-            <p className="font-semibold text-amber-950 dark:text-amber-100">
-              Encryption Session Locked
+            <p className="font-semibold text-amber-950 dark:text-amber-100 flex items-center gap-2">
+              <span>Encryption Session Locked</span>
+              {status === "UNLOCK_FAILED" && (
+                <span className="text-[11px] font-normal text-destructive bg-destructive/10 px-1.5 py-0.5 rounded border border-destructive/20">
+                  Incorrect password
+                </span>
+              )}
             </p>
             <p className="text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
               Enter your master encryption passphrase to decrypt and edit your screenplays.

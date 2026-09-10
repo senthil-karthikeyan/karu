@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import {
   ArrowLeft,
@@ -15,18 +14,24 @@ import {
   Share2,
   PanelLeftClose,
   PanelLeft,
+  Lock,
+  KeyRound,
+  ShieldAlert,
+  ShieldCheck,
+  Loader2,
 } from "lucide-react";
 import type { Project, SceneItem } from "@/types/screenplay";
 import { screenplaysApi, type ScreenplayDetailResponse } from "@/lib/api/screenplays";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import {
   parseEncryptedPayloadString,
-  encryptScreenplayContent,
   decryptScreenplayContent,
+  isEmptyEncryptedPayload,
   type TipTapDocumentJSON,
 } from "@/lib/crypto";
 import { EncryptionBadge } from "@/components/crypto/encryption-badge";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
+import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
 import { ShareScreenplayModal } from "@/components/crypto/share-screenplay-modal";
 
 import { ScreenplayToolbar } from "./screenplay-toolbar";
@@ -47,6 +52,7 @@ import {
 import type { ScreenplayElementType } from "@/types/screenplay";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/date";
+import { toast } from "sonner";
 
 interface ScreenplayEditorProps {
   project: Project;
@@ -91,14 +97,24 @@ function extractScenesFromHtml(html: string, fallbackScenes: SceneItem[]): Scene
 }
 
 export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
-  const isUnlocked = useEncryptionStore((state) => state.isUnlocked);
+  const status = useEncryptionStore((state) => state.status);
+  const isInitializing = useEncryptionStore((state) => state.isInitializing);
+  const activeUEK = useEncryptionStore((state) => state.activeUEK);
+  const userMetadata = useEncryptionStore((state) => state.userMetadata);
 
   const [screenplay, setScreenplay] = useState<ScreenplayDetailResponse | null>(null);
-  const [activeScreenplayId, setActiveScreenplayId] = useState<string>(project.id);
+  const [activeScreenplayId, setActiveScreenplayId] = useState<string>("");
   const [currentRevision, setCurrentRevision] = useState<number>(1);
+  const [isDecrypting, setIsDecrypting] = useState(false);
+  const [decryptionError, setDecryptionError] = useState<string | null>(null);
+  const [isDecrypted, setIsDecrypted] = useState(false);
+  const [isRekeying, setIsRekeying] = useState(false);
+
   const screenplayKey = useEncryptionStore(
-    (state) => state.screenplayKeys[activeScreenplayId] || state.screenplayKeys[project.id]
+    (state) => (activeScreenplayId ? state.screenplayKeys[activeScreenplayId] : undefined)
   );
+
+  const isReadyToEdit = status === "UNLOCKED" && !!activeUEK && !!screenplayKey && isDecrypted;
 
   const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [zenMode, setZenMode] = useState(false);
@@ -107,7 +123,8 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
-  const [encryptionDialogOpen, setEncryptionDialogOpen] = useState(false);
+  const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
 
   const [currentHtml, setCurrentHtml] = useState<string>("");
   const [activeSceneId, setActiveSceneId] = useState<string | undefined>(project.scenes?.[0]?.id);
@@ -120,14 +137,8 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     return extractScenesFromHtml(currentHtml, project.scenes || []);
   }, [currentHtml, project.scenes]);
 
-  // Determine initial editor content
-  const isEncryptedPayload = useMemo(() => {
-    if (!screenplay) return false;
-    return !!parseEncryptedPayloadString(screenplay.content);
-  }, [screenplay]);
-
   const initialContent = useMemo(() => {
-    return `<p data-type="action">Write your screenplay here...</p>`;
+    return `<p data-type="action"></p>`;
   }, []);
 
   // Load canonical screenplay details on mount
@@ -157,9 +168,10 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   }, [project.id]);
 
   // Initialize TipTap editor with semantic screenplay nodes and pagination
+  // Strictly non-editable until encryption readiness is established
   const editor = useEditor({
     immediatelyRender: false,
-    editable: !isEncryptedPayload || (isUnlocked && !!screenplayKey),
+    editable: false,
     extensions: [
       StarterKit.configure({
         paragraph: false,
@@ -182,7 +194,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           setStats((prev) => ({ ...prev, pageCount }));
         },
       }),
-      Underline,
       Placeholder.configure({
         placeholder: "Write scene heading (e.g. INT. TRAIN COMPARTMENT - NIGHT)...",
       }),
@@ -195,8 +206,8 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
-      // If locked/encrypted placeholder is active, do not trigger autosave
-      if (isEncryptedPayload && !screenplayKey) {
+      // If not fully ready with unlocked crypto session and key, do not trigger autosave
+      if (!isReadyToEdit || !screenplayKey) {
         return;
       }
 
@@ -226,11 +237,11 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
       saveTimeoutRef.current = setTimeout(async () => {
         try {
-          const targetId = activeScreenplayId || project.id;
+          const targetId = screenplay?.id || activeScreenplayId;
           let nextRevision = currentRevision;
 
-          if (!screenplayKey) {
-            console.warn("Autosave skipped: screenplay encryption key not loaded.");
+          if (!targetId || !isReadyToEdit || !screenplayKey) {
+            console.warn("Autosave skipped: screenplay encryption key or unlocked session not ready.");
             return;
           }
 
@@ -250,7 +261,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             nextRevision = res.revision;
           }
 
-
           setCurrentRevision(nextRevision);
           setSaveStatus("saved");
           setLastSaved(new Date());
@@ -261,6 +271,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       }, 1000);
     },
   });
+
+  // Synchronize editor editable state strictly with isReadyToEdit
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(isReadyToEdit);
+    }
+  }, [editor, isReadyToEdit]);
 
   // Calculate word count from editor
   const currentWordCount = useMemo(() => {
@@ -275,56 +292,135 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     return getActiveScreenplayType(editor);
   }, [editor]);
 
-  // Attempt to load metadata and decrypt on mount
+  // Attempt to load metadata and prompt on mount
   useEffect(() => {
-    if (!screenplay) return;
-    const isEncrypted = !!parseEncryptedPayloadString(screenplay.content);
-    if (isEncrypted && !isUnlocked) {
-      useEncryptionStore
-        .getState()
-        .fetchUserMetadata()
-        .then(() => {
-          setEncryptionDialogOpen(true);
-        });
+    let mounted = true;
+    useEncryptionStore
+      .getState()
+      .fetchUserMetadata()
+      .then(() => {
+        if (!mounted) return;
+        const currentStatus = useEncryptionStore.getState().status;
+        if (currentStatus === "NOT_CONFIGURED") {
+          setOnboardingModalOpen(true);
+        } else if (currentStatus === "LOCKED") {
+          setUnlockDialogOpen(true);
+        }
+      })
+      .catch((err) => {
+        console.debug("User metadata lookup on mount:", err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // When unlocked, load or initialize the wrapped key for this screenplay if not already in memory.
+  // CRITICAL: Only run once screenplay details have loaded so we never query keys using project.id.
+  useEffect(() => {
+    const targetId = screenplay?.id || activeScreenplayId;
+    if (!targetId || status !== "UNLOCKED" || !activeUEK) {
+      return;
     }
-  }, [screenplay, isUnlocked]);
 
-  // When unlocked, load the wrapped key for this screenplay if not already in memory
-  useEffect(() => {
-    if (isUnlocked && !screenplayKey) {
-      const targetId = activeScreenplayId || project.id;
-      useEncryptionStore
-        .getState()
-        .loadAndUnlockScreenplayKey(targetId)
-        .catch((err) => {
-          console.debug("No existing wrapped key found or unable to unwrap:", err);
-        });
+    if (useEncryptionStore.getState().screenplayKeys[targetId]) {
+      return;
     }
-  }, [isUnlocked, screenplayKey, activeScreenplayId, project.id]);
 
-  // Decrypt content when key becomes available in memory and unlock editor
+    let mounted = true;
+    useEncryptionStore
+      .getState()
+      .initializeScreenplayKey(targetId)
+      .catch((err: unknown) => {
+        if (!mounted) return;
+        console.error("Failed to initialize screenplay key:", err);
+        setDecryptionError(
+          err instanceof Error ? err.message : "Failed to load encryption key for screenplay"
+        );
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [status, activeUEK, screenplay?.id, activeScreenplayId]);
+
+  // Decrypt content when key becomes available in memory
   useEffect(() => {
-    if (!editor || !screenplay) return;
+    const targetId = screenplay?.id || activeScreenplayId;
+    if (!editor || !targetId || !screenplayKey || status !== "UNLOCKED" || !activeUEK) return;
 
-    const parsed = parseEncryptedPayloadString(screenplay.content);
-    if (parsed) {
-      if (!screenplayKey) return;
-      decryptScreenplayContent(parsed, screenplayKey)
-        .then((doc) => {
+    let mounted = true;
+
+    const loadAndDecryptContent = async () => {
+      // Yield to ensure no synchronous setState executes directly in the effect body
+      await Promise.resolve();
+      if (!mounted) return;
+
+      const rawContent = screenplay?.content;
+
+      // Handle empty/new screenplay: never attempt to decrypt empty payload or render wrapper JSON
+      if (isEmptyEncryptedPayload(rawContent)) {
+        editor.commands.setContent("<p data-type=\"action\"></p>", { emitUpdate: false });
+        if (!mounted) return;
+        setCurrentHtml(editor.getHTML());
+        setIsDecrypted(true);
+        setIsDecrypting(false);
+        setDecryptionError(null);
+        return;
+      }
+
+      const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+      const parsed = parseEncryptedPayloadString(contentStr);
+
+      if (parsed) {
+        setIsDecrypting(true);
+        setDecryptionError(null);
+        try {
+          const doc = await decryptScreenplayContent(parsed, screenplayKey);
+          if (!mounted) return;
           const normalized = normalizeScreenplayDoc(doc);
-          editor.commands.setContent(normalized);
-          editor.setEditable(true);
-        })
-        .catch((err) => {
+          editor.commands.setContent(normalized, { emitUpdate: false });
+          setCurrentHtml(editor.getHTML());
+          setIsDecrypted(true);
+        } catch (err) {
+          if (!mounted) return;
           console.error("Failed to decrypt initial content:", err);
-        });
-    } else if (screenplay.content) {
-      editor.commands.setContent(screenplay.content);
-      editor.setEditable(true);
-    } else {
-      editor.setEditable(true);
-    }
-  }, [editor, screenplayKey, screenplay]);
+          setDecryptionError(
+            `AES-GCM decryption failed (content may be corrupted or encryption key is incorrect): ${
+              err instanceof Error ? err.message : "Authentication tag verification failed"
+            }`
+          );
+        } finally {
+          if (mounted) {
+            setIsDecrypting(false);
+          }
+        }
+      } else {
+        // Guard against any encrypted wrapper JSON string accidentally slipping into editor as plaintext
+        if (
+          contentStr.trim() &&
+          contentStr !== "<p></p>" &&
+          !contentStr.includes('"algorithm"') &&
+          !contentStr.includes('"ciphertext"') &&
+          !contentStr.includes('"CIPHERTEXT"')
+        ) {
+          editor.commands.setContent(contentStr, { emitUpdate: false });
+        } else {
+          editor.commands.setContent("<p data-type=\"action\"></p>", { emitUpdate: false });
+        }
+        if (!mounted) return;
+        setCurrentHtml(editor.getHTML());
+        setIsDecrypted(true);
+        setIsDecrypting(false);
+      }
+    };
+
+    loadAndDecryptContent();
+
+    return () => {
+      mounted = false;
+    };
+  }, [editor, screenplayKey, screenplay?.id, screenplay?.content, activeScreenplayId, status, activeUEK]);
 
   // Handle format element buttons with semantic TipTap nodes
   const handleSetElementType = useCallback(
@@ -386,6 +482,114 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const calculatedMinHeight =
     Math.max(1, stats.pageCount) * 1056 + (Math.max(1, stats.pageCount) - 1) * 44;
 
+  const handleCryptoReady = useCallback(async () => {
+    const targetId = screenplay?.id || activeScreenplayId;
+    if (!targetId) return;
+
+    setDecryptionError(null);
+    try {
+      const key = await useEncryptionStore.getState().initializeScreenplayKey(targetId);
+      if (key && editor) {
+        const rawContent = screenplay?.content;
+        if (isEmptyEncryptedPayload(rawContent)) {
+          editor.commands.setContent("<p data-type=\"action\"></p>", { emitUpdate: false });
+          setCurrentHtml(editor.getHTML());
+          setIsDecrypted(true);
+          setIsDecrypting(false);
+          return;
+        }
+
+        const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
+        const parsed = parseEncryptedPayloadString(contentStr);
+        if (parsed) {
+          setIsDecrypting(true);
+          const decryptedDoc = await decryptScreenplayContent(parsed, key);
+          const normalized = normalizeScreenplayDoc(decryptedDoc);
+          editor.commands.setContent(normalized, { emitUpdate: false });
+          setCurrentHtml(editor.getHTML());
+          setIsDecrypted(true);
+          setIsDecrypting(false);
+        } else {
+          if (
+            contentStr.trim() &&
+            contentStr !== "<p></p>" &&
+            !contentStr.includes('"algorithm"') &&
+            !contentStr.includes('"ciphertext"') &&
+            !contentStr.includes('"CIPHERTEXT"')
+          ) {
+            editor.commands.setContent(contentStr, { emitUpdate: false });
+            setCurrentHtml(editor.getHTML());
+          } else {
+            editor.commands.setContent("<p data-type=\"action\"></p>", { emitUpdate: false });
+            setCurrentHtml(editor.getHTML());
+          }
+          setIsDecrypted(true);
+          setIsDecrypting(false);
+        }
+      }
+    } catch (err) {
+      console.error("handleCryptoReady failed:", err);
+      setDecryptionError(err instanceof Error ? err.message : "Failed to initialize screenplay key");
+      setIsDecrypting(false);
+    }
+  }, [screenplay, activeScreenplayId, editor]);
+
+  const handleRekeyScreenplay = useCallback(async () => {
+    const targetId = screenplay?.id || activeScreenplayId;
+    if (!targetId || !editor || !activeUEK || status !== "UNLOCKED") {
+      toast.error("Please unlock your encryption session first.");
+      setUnlockDialogOpen(true);
+      return;
+    }
+
+    try {
+      setIsRekeying(true);
+      setDecryptionError(null);
+
+      // 1. Generate new SCK and wrap/upsert to backend
+      const { sck } = await useEncryptionStore.getState().createAndWrapScreenplayKey(targetId);
+
+      // 2. Prepare content: standard initial screenplay template
+      const initialDoc: TipTapDocumentJSON = {
+        type: "doc",
+        content: [
+          {
+            type: "sceneHeading",
+            attrs: { sceneNumber: 1 },
+            content: [{ type: "text", text: "1. INT. OPENING SCENE - DAY" }],
+          },
+          {
+            type: "action",
+            content: [{ type: "text", text: "Write your screenplay here..." }],
+          },
+        ],
+      };
+
+      // 3. Encrypt and save to backend
+      const nextRev = (currentRevision || 0) + 1;
+      await screenplaysApi.saveEncryptedContent(targetId, initialDoc, sck, nextRev, {
+        wordCount: 7,
+        pageCount: 1,
+        sceneCount: 1,
+      });
+
+      // 4. Update editor and state
+      setCurrentRevision(nextRev);
+      editor.commands.setContent(initialDoc);
+      setCurrentHtml(editor.getHTML());
+      setIsDecrypted(true);
+      setIsDecrypting(false);
+      toast.success("Screenplay encryption key re-initialized and synchronized!");
+    } catch (err) {
+      console.error("Failed to re-key screenplay:", err);
+      const msg = err instanceof Error ? err.message : "Failed to re-key screenplay";
+      setDecryptionError(msg);
+      toast.error(msg);
+    } finally {
+      setIsRekeying(false);
+    }
+  }, [screenplay, activeScreenplayId, editor, activeUEK, status, currentRevision]);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-muted/30">
       {/* Top Editor Bar (Hidden in Zen Mode) */}
@@ -408,10 +612,16 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
               </span>
               <div
                 id="e2ee-encryption-badge"
-                onClick={() => setEncryptionDialogOpen(true)}
+                onClick={() => {
+                  if (status === "NOT_CONFIGURED") {
+                    setOnboardingModalOpen(true);
+                  } else {
+                    setUnlockDialogOpen(true);
+                  }
+                }}
                 className="cursor-pointer"
               >
-                <EncryptionBadge screenplayId={project.id} />
+                <EncryptionBadge screenplayId={activeScreenplayId || screenplay?.id || ""} />
               </div>
             </div>
           </div>
@@ -486,12 +696,14 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       )}
 
       {/* Formatting Toolbar */}
-      <ScreenplayToolbar
-        editor={editor}
-        onSetElementType={handleSetElementType}
-        zenMode={zenMode}
-        onToggleZenMode={() => setZenMode((prev) => !prev)}
-      />
+      <div className={!isReadyToEdit ? "pointer-events-none opacity-50 select-none transition-opacity" : "transition-opacity"}>
+        <ScreenplayToolbar
+          editor={editor}
+          onSetElementType={handleSetElementType}
+          zenMode={zenMode}
+          onToggleZenMode={() => setZenMode((prev) => !prev)}
+        />
+      </div>
 
       {/* Main Workspace: Navigator + Virtual Page Canvas */}
       <div className="flex flex-1 overflow-hidden relative">
@@ -505,7 +717,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         )}
 
         {/* Center Page Canvas Area */}
-        <main className="flex-1 overflow-y-auto flex justify-center py-8 px-4 sm:px-6 md:px-8 bg-muted/40 transition-all">
+        <main className="flex-1 overflow-y-auto flex justify-center py-8 px-4 sm:px-6 md:px-8 bg-muted/40 transition-all relative">
           <div
             className="w-full max-w-[850px] bg-background shadow-lg border border-border/80 rounded-sm min-h-[1056px] relative p-12 sm:p-16 mb-16"
             style={{
@@ -514,6 +726,172 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           >
             <EditorContent editor={editor} />
             <ScreenplayAutocompletePopover editor={editor} />
+
+            {/* Strict Encryption Blocker Overlay */}
+            {!isReadyToEdit && (
+              <div
+                id="encryption-editor-blocker-overlay"
+                className="absolute inset-0 bg-background/85 backdrop-blur-sm z-20 flex flex-col items-center justify-center p-6 sm:p-10 select-none animate-in fade-in duration-200"
+              >
+                <div className="max-w-md w-full bg-card border border-border shadow-xl rounded-xl p-6 sm:p-8 text-center flex flex-col items-center gap-4">
+                  {isInitializing ? (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                        <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Initializing Encryption
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Verifying cryptographic session and keys...
+                        </p>
+                      </div>
+                    </>
+                  ) : status === "NOT_CONFIGURED" ? (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                        <KeyRound className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Zero-Knowledge Encryption Required
+                        </h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          This screenplay is protected with client-side end-to-end encryption.
+                          Set up your encryption passphrase to activate zero-knowledge protection and begin writing.
+                        </p>
+                      </div>
+                      <Button
+                        id="setup-encryption-editor-btn"
+                        onClick={() => setOnboardingModalOpen(true)}
+                        className="gap-2 w-full mt-2"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        Set Up Encryption
+                      </Button>
+                    </>
+                  ) : status === "UNLOCK_FAILED" ? (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+                        <ShieldAlert className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Incorrect Encryption Password
+                        </h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          The encryption password entered could not decrypt your private key.
+                          Please enter your correct password to unlock this screenplay.
+                        </p>
+                        <div className="bg-destructive/10 text-destructive text-xs py-2 px-3 rounded-md font-medium">
+                          Incorrect encryption password.
+                        </div>
+                      </div>
+                      <Button
+                        id="retry-unlock-editor-btn"
+                        onClick={() => setUnlockDialogOpen(true)}
+                        variant="default"
+                        className="gap-2 w-full mt-2"
+                      >
+                        <Lock className="w-4 h-4" />
+                        Try Again
+                      </Button>
+                    </>
+                  ) : status === "LOCKED" ? (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                        <Lock className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Screenplay Is Encrypted & Locked
+                        </h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          Your screenplay content is encrypted with AES-256-GCM.
+                          Enter your encryption passphrase to decrypt the content and begin editing.
+                        </p>
+                      </div>
+                      <Button
+                        id="unlock-screenplay-editor-btn"
+                        onClick={() => setUnlockDialogOpen(true)}
+                        className="gap-2 w-full mt-2"
+                      >
+                        <Lock className="w-4 h-4" />
+                        Unlock Screenplay
+                      </Button>
+                    </>
+                  ) : decryptionError ? (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+                        <ShieldAlert className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Decryption Failed
+                        </h3>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {decryptionError}
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-2 w-full mt-2">
+                        <Button
+                          id="retry-unlock-decryption-btn"
+                          onClick={() => setUnlockDialogOpen(true)}
+                          variant="outline"
+                          className="gap-2 flex-1"
+                        >
+                          <Lock className="w-4 h-4" />
+                          Re-enter Passphrase
+                        </Button>
+                        <Button
+                          id="rekey-screenplay-btn"
+                          onClick={handleRekeyScreenplay}
+                          disabled={isRekeying}
+                          variant="default"
+                          className="gap-2 flex-1"
+                        >
+                          {isRekeying ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <KeyRound className="w-4 h-4" />
+                          )}
+                          Re-key Screenplay
+                        </Button>
+                      </div>
+                    </>
+                  ) : isDecrypting ? (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                        <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Decrypting Screenplay Content
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Decrypting scenes and dialogue with verified screenplay key...
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                        <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="font-semibold text-base text-foreground">
+                          Unwrapping Screenplay Key
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Decrypting screenplay session key with your master key...
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -534,9 +912,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           <span className="capitalize font-mono font-medium px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground">
             {activeElementType.replace("-", " ")}
           </span>
-          {isUnlocked && screenplayKey && (
+          {isReadyToEdit ? (
             <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[10px]">
               <span>🔒</span> E2EE Protected
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+              <span>🔓</span> E2EE Locked
             </span>
           )}
         </div>
@@ -555,7 +937,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       <VersionHistoryModal
         open={historyModalOpen}
         onOpenChange={setHistoryModalOpen}
-        screenplayId={activeScreenplayId || project.id}
+        screenplayId={activeScreenplayId || screenplay?.id || ""}
         projectId={project.id}
         editor={editor}
         onVersionRestored={(newRev) => {
@@ -568,63 +950,23 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       <ShareScreenplayModal
         open={shareModalOpen}
         onOpenChange={setShareModalOpen}
-        screenplayId={activeScreenplayId || project.id}
+        screenplayId={activeScreenplayId || screenplay?.id || ""}
         screenplayTitle={screenplay?.title || project.title}
       />
 
+      {/* E2EE Setup Modal */}
+      <EncryptionOnboardingModal
+        open={onboardingModalOpen}
+        onOpenChange={setOnboardingModalOpen}
+        onSuccess={handleCryptoReady}
+      />
 
-      {/* E2EE Setup / Unlock Modal */}
+      {/* E2EE Unlock Modal */}
       <EncryptionDialog
-        open={encryptionDialogOpen}
-        onOpenChange={setEncryptionDialogOpen}
-        mode={useEncryptionStore.getState().userMetadata ? "unlock" : "setup"}
-        onSuccess={async () => {
-          const targetId = activeScreenplayId || project.id;
-          let key =
-            useEncryptionStore.getState().screenplayKeys[targetId] ||
-            useEncryptionStore.getState().screenplayKeys[project.id];
-          if (!key) {
-            try {
-              key = await useEncryptionStore.getState().loadAndUnlockScreenplayKey(targetId);
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message.toLowerCase() : "";
-              const statusCode =
-                (err as { statusCode?: number })?.statusCode || (err as { status?: number })?.status;
-              const code = (err as { code?: string })?.code;
-              if (
-                statusCode === 404 ||
-                code === "NOT_FOUND" ||
-                code === "ENTITY_NOT_FOUND" ||
-                msg.includes("404") ||
-                msg.includes("not found") ||
-                msg.includes("screenplay key not found")
-              ) {
-                const res = await useEncryptionStore.getState().createAndWrapScreenplayKey(targetId);
-                key = res.sck;
-              } else {
-                throw err;
-              }
-            }
-          }
-
-          if (key && editor) {
-            const rawContent = screenplay?.content || "";
-            const contentStr = typeof rawContent === "string" ? rawContent : JSON.stringify(rawContent);
-            const parsed = parseEncryptedPayloadString(contentStr);
-            if (parsed) {
-              const decryptedDoc = await decryptScreenplayContent(parsed, key);
-              const normalized = normalizeScreenplayDoc(decryptedDoc);
-              editor.commands.setContent(normalized);
-              editor.setEditable(true);
-            } else {
-              const json = editor.getJSON() as TipTapDocumentJSON;
-              const res = await screenplaysApi.saveEncryptedContent(targetId, json, key, currentRevision);
-              if (res && res.revision) {
-                setCurrentRevision(res.revision);
-              }
-            }
-          }
-        }}
+        open={unlockDialogOpen}
+        onOpenChange={setUnlockDialogOpen}
+        mode={userMetadata ? "unlock" : "setup"}
+        onSuccess={handleCryptoReady}
       />
     </div>
   );

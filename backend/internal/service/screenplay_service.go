@@ -91,11 +91,6 @@ func (s *screenplayService) verifyAccess(ctx context.Context, screenplayID, user
 		return nil
 	}
 
-	// 1b. Check if screenplayID is directly a project ID owned by the user (legacy compatibility)
-	if _, pErr := s.projectRepo.GetByIDAndUserID(ctx, screenplayID, userID); pErr == nil {
-		return nil
-	}
-
 	// 2. Collaborator check via screenplay_access_keys
 	accessKey, err := s.screenplayRepo.GetScreenplayAccessKey(ctx, screenplayID, userID)
 	if err != nil {
