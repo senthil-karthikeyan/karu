@@ -145,102 +145,222 @@
   box-shadow: 0 4px 25px -2px rgba(0, 0, 0, 0.4);
 }
 
-/* TipTap Editor Container */
+/* ============================================================
+   PHYSICAL PAGE GEOMETRY
+   8.5" × 11" at 96 DPI = 816px × 1056px
+   Left margin: 1.5" = 144px (screenplay binding standard)
+   Right margin: 1.0" = 96px
+   Top margin:   1.0" = 96px
+   Bottom margin: 1.0" = 96px
+   Usable content width: 816 - 144 - 96 = 576px
+   ============================================================ */
+
+/* The scrollable workspace behind the page */
+.screenplay-workspace {
+  background-color: var(--color-muted, #f4f4f5);
+}
+
+.dark .screenplay-workspace {
+  background-color: #0c0c0e;
+}
+
+/* Physical page: fixed 8.5×11 dimensions, never percentage-based */
+.screenplay-page {
+  width: 816px;
+  box-sizing: border-box;
+  /* Padding encodes physical margins: top 96px | right 96px | bottom 96px | left 144px */
+  padding: 96px 96px 96px 144px;
+  background-color: #ffffff;
+  color: #121212;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.dark .screenplay-page {
+  background-color: #16161a;
+  color: #e4e4e7;
+}
+
+/* ============================================================
+   TIPTAP EDITOR CONTAINER
+   All padding is on .screenplay-page — the TipTap container
+   itself is zero-padding, filling the content area exactly.
+   ============================================================ */
 .screenplay-editor .tiptap {
   font-family: var(--font-courier-prime), "Courier Prime", "Courier New", Courier, monospace;
-  font-size: 15px;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
+  /* 12pt at 96 DPI = 16px. Standard Courier screenplay spec. */
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 0;
   outline: none;
-  min-height: 900px;
-  padding: 1.5rem 3rem 4rem 3rem;
-  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  min-height: 0;
 }
 
-@media (max-width: 640px) {
-  .screenplay-editor .tiptap {
-    padding: 1.25rem 1.5rem 3rem 1.5rem;
-  }
-}
+/* ============================================================
+   SCREENPLAY ELEMENT RULES (fixed pixel columns)
+   ============================================================ */
 
-/* TipTap screenplay content formatting & Preview styling */
+/* Scene Heading — full content width, uppercase, bold */
 .screenplay-paper h2,
 .screenplay-paper [data-type="scene-heading"],
 .screenplay-editor .tiptap h2,
 .screenplay-editor .tiptap [data-type="scene-heading"] {
   font-weight: 700;
   text-transform: uppercase;
-  margin-top: 2rem;
-  margin-bottom: 0.75rem;
-  font-size: 15px;
-  letter-spacing: 0.02em;
+  margin-top: 24px;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+  font-size: 16px;
+  letter-spacing: 0;
+  line-height: 1.5;
+  width: 100%;
 }
 
+.screenplay-editor .tiptap [data-type="scene-heading"]:first-child {
+  margin-top: 0;
+}
+
+/* Action — full content width */
 .screenplay-paper p,
 .screenplay-paper [data-type="action"],
 .screenplay-editor .tiptap p,
 .screenplay-editor .tiptap [data-type="action"] {
-  margin-bottom: 0.85rem;
-  max-width: 100%;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+  line-height: 1.5;
+  padding-top: 0;
+  padding-bottom: 12px;
 }
 
+/* Character cue — ~3.7" from left paper edge = 211px from content left */
 .screenplay-paper [data-type="character"],
 .screenplay-editor .tiptap [data-type="character"] {
   text-transform: uppercase;
   font-weight: 700;
-  margin-top: 1.25rem;
-  margin-bottom: 0.1rem;
-  margin-left: 37%;
-  width: fit-content;
+  margin-top: 24px;
+  margin-bottom: 0;
+  margin-left: 211px;
+  margin-right: 0;
+  width: auto;
+  line-height: 1.5;
 }
 
+/* Parenthetical */
 .screenplay-paper [data-type="parenthetical"],
 .screenplay-editor .tiptap [data-type="parenthetical"] {
   margin-top: 0;
-  margin-bottom: 0.1rem;
-  margin-left: 30%;
-  width: fit-content;
+  margin-bottom: 0;
+  margin-left: 154px;
+  margin-right: 100px;
   font-style: normal;
+  line-height: 1.5;
 }
 
+/* Extension — (V.O.), (O.S.), (PHONE) etc. Same column as character */
+.screenplay-paper [data-type="extension"],
+.screenplay-editor .tiptap [data-type="extension"] {
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 211px;
+  margin-right: 0;
+  line-height: 1.5;
+}
+
+/* Subheader — within-scene location (HALLWAY, JOHN'S POV) */
+.screenplay-paper [data-type="subheader"],
+.screenplay-editor .tiptap [data-type="subheader"] {
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-top: 16px;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+  line-height: 1.5;
+}
+
+/* Dialogue */
 .screenplay-paper [data-type="dialogue"],
 .screenplay-editor .tiptap [data-type="dialogue"] {
-  margin-left: 20%;
-  max-width: 60%;
-  margin-bottom: 0.85rem;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 96px;
+  margin-right: 96px;
+  line-height: 1.5;
+  padding-bottom: 12px;
 }
 
+/* Transition — right-aligned */
 .screenplay-paper [data-type="transition"],
 .screenplay-editor .tiptap [data-type="transition"] {
   text-transform: uppercase;
   font-weight: 700;
   text-align: right;
-  margin-top: 1.25rem;
-  margin-bottom: 1.25rem;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  margin-left: 0;
+  margin-right: 0;
+  line-height: 1.5;
 }
 
+/* TipTap placeholder */
+.screenplay-editor .tiptap p.is-editor-empty:first-child::before,
+.screenplay-editor .tiptap [data-type="action"].is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #a1a1aa;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* Shot */
 .screenplay-paper [data-type="shot"],
 .screenplay-editor .tiptap [data-type="shot"] {
   text-transform: uppercase;
   font-weight: 700;
-  margin-top: 1.5rem;
-  margin-bottom: 0.75rem;
-  letter-spacing: 0.02em;
+  margin-top: 24px;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
-/* Page Break Widget within ProseMirror */
+/* TipTap placeholder text */
+.screenplay-editor .tiptap p.is-editor-empty:first-child::before,
+.screenplay-editor .tiptap [data-type="action"].is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #a1a1aa;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* ============================================================
+   PAGE BREAK WIDGETS
+   The widget must span the full physical page width (816px),
+   but it lives inside the content area (576px wide).
+   We extend it left by 144px (left margin) and right by 96px (right margin).
+   ============================================================ */
+
 .screenplay-page-break-widget {
   user-select: none;
   pointer-events: none;
   width: 100%;
-  margin-top: 2rem;
-  margin-bottom: 2rem;
+  /* No margin — the bottom/gap/top strips handle vertical spacing */
 }
 
-/* Bottom of ending page */
+/* Bottom strip: stretches to fill full 816px page width */
 .screenplay-page-bottom-strip {
-  width: calc(100% + 6rem);
-  margin-left: -3rem;
+  width: calc(100% + 144px + 96px); /* content + left margin + right margin = 816px */
+  margin-left: -144px;
   height: 48px;
   background-color: inherit;
   border-bottom: 1px solid #e4e4e7;
@@ -248,6 +368,7 @@
   border-bottom-right-radius: 4px;
   box-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.06);
   position: relative;
+  box-sizing: border-box;
 }
 
 .dark .screenplay-page-bottom-strip {
@@ -255,17 +376,10 @@
   box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.35);
 }
 
-@media (max-width: 640px) {
-  .screenplay-page-bottom-strip {
-    width: calc(100% + 3rem);
-    margin-left: -1.5rem;
-  }
-}
-
-/* Gap between pages */
+/* Gap strip: the space between pages */
 .screenplay-page-gap {
-  width: calc(100% + 8rem);
-  margin-left: -4rem;
+  width: calc(100% + 144px + 96px);
+  margin-left: -144px;
   height: 44px;
   background-color: var(--color-muted, #f4f4f5);
   display: flex;
@@ -274,19 +388,13 @@
   position: relative;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
 }
 
 .dark .screenplay-page-gap {
   background-color: #0c0c0e;
   border-top-color: rgba(255, 255, 255, 0.04);
   border-bottom-color: rgba(255, 255, 255, 0.04);
-}
-
-@media (max-width: 640px) {
-  .screenplay-page-gap {
-    width: calc(100% + 4rem);
-    margin-left: -2rem;
-  }
 }
 
 .screenplay-page-gap-indicator {
@@ -320,6 +428,7 @@
   padding: 2px 10px;
   border-radius: 9999px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
 }
 
 .dark .screenplay-page-gap-badge {
@@ -327,31 +436,23 @@
   border-color: #27272a;
 }
 
-/* Top of next page with header & page number */
+/* Top strip of next page: header with title + page number */
 .screenplay-page-top-strip {
-  width: calc(100% + 6rem);
-  margin-left: -3rem;
+  width: calc(100% + 144px + 96px);
+  margin-left: -144px;
   min-height: 52px;
   background-color: inherit;
   border-top: 1px solid #e4e4e7;
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
   box-shadow: 0 -2px 10px -2px rgba(0, 0, 0, 0.04), 0 4px 16px -2px rgba(0, 0, 0, 0.06);
-  padding: 20px 3rem 12px 3rem;
+  padding: 20px 96px 12px 144px; /* match physical page margins */
   box-sizing: border-box;
 }
 
 .dark .screenplay-page-top-strip {
   border-top-color: #27272a;
   box-shadow: 0 -2px 10px -2px rgba(0, 0, 0, 0.2), 0 4px 20px -2px rgba(0, 0, 0, 0.35);
-}
-
-@media (max-width: 640px) {
-  .screenplay-page-top-strip {
-    width: calc(100% + 3rem);
-    margin-left: -1.5rem;
-    padding: 16px 1.5rem 8px 1.5rem;
-  }
 }
 
 .screenplay-page-header {
@@ -370,7 +471,9 @@
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Print simulation for Screenplay Preview & Print */
+/* ============================================================
+   PRINT / PDF EXPORT
+   ============================================================ */
 @media print {
   body {
     background: #ffffff !important;
@@ -379,12 +482,11 @@
   .no-print {
     display: none !important;
   }
-  .screenplay-paper {
+  .screenplay-page {
     box-shadow: none !important;
     border: none !important;
-    padding: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
+    width: 816px !important;
+    padding: 96px 96px 96px 144px !important;
   }
   .screenplay-page-gap {
     display: none !important;

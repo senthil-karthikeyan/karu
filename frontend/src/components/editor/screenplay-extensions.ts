@@ -245,8 +245,79 @@ export const Shot = Node.create({
   },
 });
 
+
+/**
+ * Semantic Node: Extension
+ * Renders as <p data-type="extension">
+ * Used for character modifiers: (V.O.), (O.S.), (PHONE), (PRE-LAP)
+ */
+export const ExtensionNode = Node.create({
+  name: "extension",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "extension",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "extension",
+        renderHTML: () => ({ "data-type": "extension" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="extension"]' },
+      { tag: 'div[data-type="extension"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "extension" }, 0];
+  },
+});
+
+/**
+ * Semantic Node: Subheader
+ * Renders as <p data-type="subheader">
+ * Used for location movement within a scene without a full new scene heading.
+ * Examples: HALLWAY, LIVING ROOM, JOHN'S POV
+ */
+export const Subheader = Node.create({
+  name: "subheader",
+  priority: 1000,
+  group: "block",
+  content: "inline*",
+  defining: true,
+
+  addAttributes() {
+    return {
+      dataType: {
+        default: "subheader",
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-type") || "subheader",
+        renderHTML: () => ({ "data-type": "subheader" }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'p[data-type="subheader"]' },
+      { tag: 'div[data-type="subheader"]' },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["p", { ...HTMLAttributes, "data-type": "subheader" }, 0];
+  },
+});
+
 /**
  * All Screenplay Semantic Nodes
+ * Order matters for priority resolution in ProseMirror.
  */
 export const ScreenplayNodes = [
   SceneHeading,
@@ -254,7 +325,9 @@ export const ScreenplayNodes = [
   Character,
   Dialogue,
   Parenthetical,
+  ExtensionNode,
   Transition,
+  Subheader,
   Shot,
 ];
 
@@ -275,7 +348,9 @@ export function getActiveScreenplayType(editor: {
   if (editor.isActive("character")) return "character";
   if (editor.isActive("dialogue")) return "dialogue";
   if (editor.isActive("parenthetical")) return "parenthetical";
+  if (editor.isActive("extension")) return "extension";
   if (editor.isActive("transition")) return "transition";
+  if (editor.isActive("subheader")) return "subheader";
   if (editor.isActive("shot")) return "shot";
   return "action";
 }
@@ -386,7 +461,9 @@ export const ScreenplayAutoFormatting = Extension.create({
             const typeName = node.type.name;
             const isUppercaseType =
               typeName === "character" ||
+              typeName === "extension" ||
               typeName === "sceneHeading" ||
+              typeName === "subheader" ||
               typeName === "transition" ||
               typeName === "shot";
 
@@ -420,18 +497,26 @@ export const ScreenplayShortcuts = Extension.create({
 
   addKeyboardShortcuts() {
     return {
+      /**
+       * Tab — cycles forward through primary screenplay elements.
+       * Structural navigation shortcut, NOT user-customizable.
+       * Element-selection shortcuts (Mod+Alt+N) are handled by TanStack Hotkeys.
+       */
       Tab: () => {
         const currentType = getActiveScreenplayType(this.editor);
 
+        // Tab cycles through the primary screenplay element types
         const cycleMap: Record<string, string> = {
+          "scene-heading": "action",
+          sceneHeading: "action",
           action: "character",
           character: "dialogue",
           dialogue: "parenthetical",
-          parenthetical: "transition",
+          parenthetical: "extension",
+          extension: "transition",
           transition: "shot",
-          shot: "sceneHeading",
-          "scene-heading": "action",
-          sceneHeading: "action",
+          shot: "subheader",
+          subheader: "sceneHeading",
         };
 
         const next = cycleMap[currentType] || "action";
@@ -439,18 +524,21 @@ export const ScreenplayShortcuts = Extension.create({
         return true;
       },
 
+      /** Shift-Tab — cycles backward through screenplay elements. */
       "Shift-Tab": () => {
         const currentType = getActiveScreenplayType(this.editor);
 
         const reverseCycleMap: Record<string, string> = {
+          "scene-heading": "subheader",
+          sceneHeading: "subheader",
           action: "sceneHeading",
-          sceneHeading: "shot",
-          "scene-heading": "shot",
-          shot: "transition",
-          transition: "parenthetical",
-          parenthetical: "dialogue",
-          dialogue: "character",
           character: "action",
+          dialogue: "character",
+          parenthetical: "dialogue",
+          extension: "parenthetical",
+          transition: "extension",
+          shot: "transition",
+          subheader: "shot",
         };
 
         const prev = reverseCycleMap[currentType] || "action";
@@ -458,6 +546,10 @@ export const ScreenplayShortcuts = Extension.create({
         return true;
       },
 
+      /**
+       * Enter — context-aware block splitting.
+       * Each element type defines what the next block should be when the user presses Enter.
+       */
       Enter: () => {
         const currentType = getActiveScreenplayType(this.editor);
         const { $anchor } = this.editor.state.selection;
@@ -468,12 +560,23 @@ export const ScreenplayShortcuts = Extension.create({
           return true;
         }
 
+        if (currentType === "subheader") {
+          this.editor.chain().splitBlock().setNode("action").run();
+          return true;
+        }
+
         if (currentType === "character") {
           if (textInCurrentBlock.length === 0) {
-            // Empty character block -> convert to action
+            // Empty character block → convert to action
             this.editor.chain().focus().setNode("action").run();
             return true;
           }
+          this.editor.chain().splitBlock().setNode("dialogue").run();
+          return true;
+        }
+
+        if (currentType === "extension") {
+          // Extension after character → dialogue
           this.editor.chain().splitBlock().setNode("dialogue").run();
           return true;
         }
@@ -485,7 +588,7 @@ export const ScreenplayShortcuts = Extension.create({
 
         if (currentType === "dialogue") {
           if (textInCurrentBlock.length === 0) {
-            // Empty dialogue line on double enter -> convert to action
+            // Empty dialogue line on double enter → convert to action
             this.editor.chain().focus().setNode("action").run();
             return true;
           }
@@ -506,6 +609,7 @@ export const ScreenplayShortcuts = Extension.create({
         return false;
       },
 
+      /** Backspace on empty non-action block → resets to action */
       Backspace: () => {
         const { empty, $anchor } = this.editor.state.selection;
         if (!empty) return false;
@@ -514,7 +618,6 @@ export const ScreenplayShortcuts = Extension.create({
         const isStartOfBlock = $anchor.parentOffset === 0;
         const isBlockEmpty = $anchor.parent.textContent.length === 0;
 
-        // If backspacing on an empty specialized block, reset to action first
         if (isStartOfBlock && isBlockEmpty && currentType !== "action") {
           this.editor.chain().focus().setNode("action").run();
           return true;
@@ -522,15 +625,9 @@ export const ScreenplayShortcuts = Extension.create({
 
         return false;
       },
-
-      // Fast formatting shortcuts (Mod-Alt-1 to Mod-Alt-7)
-      "Mod-Alt-1": () => this.editor.chain().focus().setNode("sceneHeading").run(),
-      "Mod-Alt-2": () => this.editor.chain().focus().setNode("action").run(),
-      "Mod-Alt-3": () => this.editor.chain().focus().setNode("character").run(),
-      "Mod-Alt-4": () => this.editor.chain().focus().setNode("dialogue").run(),
-      "Mod-Alt-5": () => this.editor.chain().focus().setNode("parenthetical").run(),
-      "Mod-Alt-6": () => this.editor.chain().focus().setNode("transition").run(),
-      "Mod-Alt-7": () => this.editor.chain().focus().setNode("shot").run(),
+      // NOTE: Element-type selection shortcuts (Mod+Alt+1 through Mod+Alt+9) are
+      // intentionally NOT registered here. They are managed by TanStack Hotkeys
+      // in screenplay-editor.tsx, enabling user customization from Settings → Shortcuts.
     };
   },
 });
@@ -553,6 +650,12 @@ export function estimateBlockHeight(node: PMNode): number {
   }
   if (type === "parenthetical") {
     return 22;
+  }
+  if (type === "extension") {
+    return 22;
+  }
+  if (type === "subheader") {
+    return 50;
   }
   if (type === "dialogue") {
     const lines = Math.max(1, Math.ceil(len / 45));

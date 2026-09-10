@@ -2,13 +2,36 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { User, Shield, Sliders, Save, Check, Loader2, Lock, KeyRound, Download, ShieldCheck, ShieldAlert } from "lucide-react";
+import {
+  User,
+  Shield,
+  Sliders,
+  Save,
+  Check,
+  Loader2,
+  Lock,
+  KeyRound,
+  Download,
+  ShieldCheck,
+  ShieldAlert,
+  Keyboard,
+  RotateCcw,
+  AlertCircle,
+  Pencil,
+  X,
+  Heading,
+  AlignLeft,
+  MessageSquare,
+  ArrowRight,
+  Camera,
+  Volume2,
+  Milestone,
+} from "lucide-react";
 import { useUserProfileQuery, useUpdateUserProfileMutation } from "@/hooks/use-user";
 import { useAuth } from "@/hooks/use-auth";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
-import { generateEmergencyRecoveryKey, downloadRecoveryKit } from "@/lib/crypto/recovery";
 import { MainNav } from "@/components/navigation/main-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +40,330 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  useShortcutsStore,
+  formatHotkeyForDisplay,
+  type ShortcutDefinition,
+} from "@/stores/screenplay-shortcuts-store";
 import type { UserResponse } from "@/lib/api";
+
+function ScreenplayShortcutsSettings() {
+  const {
+    definitions,
+    userBindings,
+    setUserBinding,
+    resetUserBinding,
+    resetAllBindings,
+    getEffectiveHotkey,
+    detectConflict,
+  } = useShortcutsStore();
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [recordedHotkey, setRecordedHotkey] = useState<string | null>(null);
+
+  const primaryDefs = definitions.filter((d) => d.category === "primary");
+  const secondaryDefs = definitions.filter((d) => d.category === "secondary");
+  const tertiaryDefs = definitions.filter((d) => d.category === "tertiary");
+
+  const activeConflict =
+    editingId && recordedHotkey ? detectConflict(recordedHotkey, editingId) : null;
+
+  const handleStartEditing = (id: string) => {
+    setEditingId(id);
+    setRecordedHotkey(getEffectiveHotkey(id));
+  };
+
+  const handleSave = (id: string) => {
+    if (!recordedHotkey || activeConflict) return;
+    setUserBinding(id, recordedHotkey);
+    toast.success(`Updated shortcut for ${definitions.find((d) => d.id === id)?.label}!`);
+    setEditingId(null);
+    setRecordedHotkey(null);
+  };
+
+  const handleCancel = () => {
+    setEditingId(null);
+    setRecordedHotkey(null);
+  };
+
+  const handleReset = (id: string) => {
+    resetUserBinding(id);
+    toast.info(`Reset ${definitions.find((d) => d.id === id)?.label} shortcut to default.`);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.key === "Escape") {
+      handleCancel();
+      return;
+    }
+
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) {
+      return;
+    }
+
+    const parts: string[] = [];
+    if (e.metaKey || e.ctrlKey) parts.push("Mod");
+    if (e.altKey) parts.push("Alt");
+    if (e.shiftKey) parts.push("Shift");
+
+    let key = e.key;
+    if (key === " ") key = "Space";
+    else if (key.length === 1) key = key.toUpperCase();
+
+    parts.push(key);
+    const hotkeyString = parts.join("+");
+    setRecordedHotkey(hotkeyString);
+  };
+
+  const getElementIcon = (id: string) => {
+    switch (id) {
+      case "scene-heading":
+        return <Heading className="h-4 w-4 text-amber-500" />;
+      case "action":
+        return <AlignLeft className="h-4 w-4 text-muted-foreground" />;
+      case "character":
+        return <User className="h-4 w-4 text-blue-500" />;
+      case "dialogue":
+        return <MessageSquare className="h-4 w-4 text-purple-500" />;
+      case "parenthetical":
+        return <span className="font-mono text-xs font-bold text-amber-600 dark:text-amber-400">( )</span>;
+      case "extension":
+        return <Volume2 className="h-4 w-4 text-indigo-500" />;
+      case "transition":
+        return <ArrowRight className="h-4 w-4 text-rose-500" />;
+      case "subheader":
+        return <Milestone className="h-4 w-4 text-emerald-500" />;
+      case "shot":
+        return <Camera className="h-4 w-4 text-cyan-500" />;
+      default:
+        return <Keyboard className="h-4 w-4" />;
+    }
+  };
+
+  const renderShortcutRow = (def: ShortcutDefinition) => {
+    const isEditing = editingId === def.id;
+    const effectiveHotkey = getEffectiveHotkey(def.id);
+    const displayHotkey = formatHotkeyForDisplay(
+      isEditing ? recordedHotkey || effectiveHotkey : effectiveHotkey
+    );
+    const isCustom = !!userBindings[def.id];
+
+    return (
+      <div
+        key={def.id}
+        className={`p-3 rounded-lg border transition-all ${
+          isEditing
+            ? "border-primary ring-2 ring-primary/20 bg-primary/5"
+            : "border-border hover:border-border/80 bg-card"
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-md bg-muted/60 shrink-0">
+              {getElementIcon(def.id)}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium leading-none">{def.label}</p>
+                {isCustom && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                    Custom
+                  </Badge>
+                )}
+              </div>
+              {def.description && (
+                <p className="text-xs text-muted-foreground mt-1">{def.description}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 ml-auto sm:ml-0">
+            {isEditing ? (
+              <div className="flex flex-col items-end gap-1.5">
+                <div
+                  tabIndex={0}
+                  onKeyDown={handleKeyDown}
+                  className="outline-none focus:ring-2 focus:ring-primary px-3 py-1.5 rounded-md bg-background border border-primary/50 text-xs font-mono font-semibold flex items-center gap-2 cursor-pointer shadow-xs animate-pulse"
+                >
+                  <span className="h-2 w-2 rounded-full bg-primary animate-ping" />
+                  <span>{displayHotkey || "Press keys..."}</span>
+                </div>
+                {activeConflict && (
+                  <div className="flex items-center gap-1 text-[11px] text-destructive font-medium">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    <span>Conflicts with {activeConflict.label}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1 mt-1">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    className="h-7 text-xs px-2 gap-1"
+                    disabled={!recordedHotkey || !!activeConflict}
+                    onClick={() => handleSave(def.id)}
+                  >
+                    <Check className="h-3 w-3" />
+                    Apply
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs px-2 gap-1"
+                    onClick={handleCancel}
+                  >
+                    <X className="h-3 w-3" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <kbd className="font-mono text-xs px-2.5 py-1 rounded-md bg-muted border border-border/80 font-semibold text-foreground shadow-xs">
+                  {displayHotkey}
+                </kbd>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs px-2.5 gap-1"
+                  onClick={() => handleStartEditing(def.id)}
+                >
+                  <Pencil className="h-3 w-3" />
+                  Edit
+                </Button>
+                {isCustom && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs px-2 gap-1 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleReset(def.id)}
+                    title="Reset to default"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const hasCustomBindings = Object.keys(userBindings).length > 0;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Keyboard className="h-4 w-4 text-primary" />
+                Screenplay Keyboard Shortcuts
+              </CardTitle>
+              <CardDescription>
+                Customize keyboard shortcuts for fast screenplay element switching.
+                Shortcuts are stored locally on your device.
+              </CardDescription>
+            </div>
+            {hasCustomBindings && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  resetAllBindings();
+                  toast.info("All shortcuts reset to defaults.");
+                }}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Reset All
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {/* Primary Elements */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Primary Screenplay Elements
+              </h3>
+              <span className="text-[10px] text-muted-foreground/70">
+                Core flow: Scene Heading, Action, Character, Dialogue
+              </span>
+            </div>
+            <div className="grid gap-2">{primaryDefs.map(renderShortcutRow)}</div>
+          </div>
+
+          {/* Secondary Elements */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Secondary Elements
+              </h3>
+              <span className="text-[10px] text-muted-foreground/70">
+                Modifiers: Parenthetical, Extension, Transition
+              </span>
+            </div>
+            <div className="grid gap-2">{secondaryDefs.map(renderShortcutRow)}</div>
+          </div>
+
+          {/* Tertiary Elements */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Movement &amp; Camera
+              </h3>
+              <span className="text-[10px] text-muted-foreground/70">
+                Within-scene location movement and camera angles
+              </span>
+            </div>
+            <div className="grid gap-2">{tertiaryDefs.map(renderShortcutRow)}</div>
+          </div>
+
+          {/* Structural Shortcuts Reference Card */}
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Built-in Structural Shortcuts
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="flex items-center justify-between p-2 rounded bg-background/60 border border-border/50">
+                <span className="text-muted-foreground">Cycle forward element</span>
+                <kbd className="font-mono text-[11px] px-2 py-0.5 rounded bg-muted border font-semibold">
+                  Tab
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded bg-background/60 border border-border/50">
+                <span className="text-muted-foreground">Cycle backward element</span>
+                <kbd className="font-mono text-[11px] px-2 py-0.5 rounded bg-muted border font-semibold">
+                  Shift + Tab
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded bg-background/60 border border-border/50">
+                <span className="text-muted-foreground">Context-aware split</span>
+                <kbd className="font-mono text-[11px] px-2 py-0.5 rounded bg-muted border font-semibold">
+                  Enter
+                </kbd>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded bg-background/60 border border-border/50">
+                <span className="text-muted-foreground">Reset empty block to Action</span>
+                <kbd className="font-mono text-[11px] px-2 py-0.5 rounded bg-muted border font-semibold">
+                  Backspace
+                </kbd>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function SettingsFormContent({ user }: { user: UserResponse }) {
   const updateProfileMutation = useUpdateUserProfileMutation();
@@ -104,6 +450,10 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
         <TabsTrigger value="preferences" className="gap-2 text-xs">
           <Sliders className="h-3.5 w-3.5" />
           Editor Preferences
+        </TabsTrigger>
+        <TabsTrigger value="shortcuts" className="gap-2 text-xs">
+          <Keyboard className="h-3.5 w-3.5" />
+          Shortcuts
         </TabsTrigger>
         <TabsTrigger value="security" className="gap-2 text-xs">
           <Shield className="h-3.5 w-3.5" />
@@ -279,6 +629,11 @@ function SettingsFormContent({ user }: { user: UserResponse }) {
             </Button>
           </CardFooter>
         </Card>
+      </TabsContent>
+
+      {/* Shortcuts Tab */}
+      <TabsContent value="shortcuts">
+        <ScreenplayShortcutsSettings />
       </TabsContent>
 
       {/* Security Tab */}
