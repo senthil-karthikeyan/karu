@@ -21,6 +21,8 @@ import {
   X,
   Maximize2,
   Minimize2,
+  Volume2,
+  Milestone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +33,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useShortcutsStore, formatHotkeyForDisplay } from "@/stores/screenplay-shortcuts-store";
 
 import { getActiveScreenplayType } from "./screenplay-extensions";
 import type { ScreenplayElementType } from "@/types/screenplay";
@@ -53,9 +61,19 @@ export function ScreenplayToolbar({
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
 
+  const { definitions, getEffectiveHotkey } = useShortcutsStore();
+
   if (!editor) return null;
 
   const activeType = getActiveScreenplayType(editor);
+
+  const getDef = (id: string) => definitions.find((d) => d.id === id);
+  const getShortcutDisplay = (id: string) => {
+    const hotkey = getEffectiveHotkey(id);
+    return formatHotkeyForDisplay(hotkey);
+  };
+
+  const isTertiaryActive = activeType === "subheader" || activeType === "shot";
 
   // Search logic across editor text
   const handleSearch = (query: string) => {
@@ -157,153 +175,374 @@ export function ScreenplayToolbar({
           {/* Mobile / Compact Dropdown Selector */}
           <div className="lg:hidden">
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1.5 capitalize font-medium" />}>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs px-2.5 gap-1.5 capitalize font-medium"
+                  />
+                }
+              >
                 {activeType === "scene-heading" && <Heading className="h-3.5 w-3.5 text-amber-500" />}
                 {activeType === "action" && <AlignLeft className="h-3.5 w-3.5 text-muted-foreground" />}
                 {activeType === "character" && <User className="h-3.5 w-3.5 text-blue-500" />}
                 {activeType === "dialogue" && <MessageSquare className="h-3.5 w-3.5 text-purple-500" />}
                 {activeType === "parenthetical" && <span className="font-mono text-xs">( )</span>}
+                {activeType === "extension" && <Volume2 className="h-3.5 w-3.5 text-indigo-500" />}
                 {activeType === "transition" && <ArrowRight className="h-3.5 w-3.5 text-rose-500" />}
+                {activeType === "subheader" && <Milestone className="h-3.5 w-3.5 text-emerald-500" />}
                 {activeType === "shot" && <Camera className="h-3.5 w-3.5 text-cyan-500" />}
                 <span>{activeType.replace("-", " ")}</span>
                 <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-44">
+              <DropdownMenuContent align="start" className="min-w-48">
                 <DropdownMenuItem onClick={() => onSetElementType("scene-heading")}>
                   <Heading className="h-3.5 w-3.5 text-amber-500 mr-2" />
                   <span>Scene Heading</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥1</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("scene-heading")}
+                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSetElementType("action")}>
                   <AlignLeft className="h-3.5 w-3.5 text-muted-foreground mr-2" />
                   <span>Action</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥2</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("action")}
+                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSetElementType("character")}>
                   <User className="h-3.5 w-3.5 text-blue-500 mr-2" />
                   <span>Character</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥3</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("character")}
+                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSetElementType("dialogue")}>
                   <MessageSquare className="h-3.5 w-3.5 text-purple-500 mr-2" />
                   <span>Dialogue</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥4</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("dialogue")}
+                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSetElementType("parenthetical")}>
                   <span className="font-mono text-xs mr-2">( )</span>
                   <span>Parenthetical</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥5</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("parenthetical")}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onSetElementType("extension")}>
+                  <Volume2 className="h-3.5 w-3.5 text-indigo-500 mr-2" />
+                  <span>Extension</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("extension")}
+                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSetElementType("transition")}>
                   <ArrowRight className="h-3.5 w-3.5 text-rose-500 mr-2" />
                   <span>Transition</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥6</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("transition")}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onSetElementType("subheader")}>
+                  <Milestone className="h-3.5 w-3.5 text-emerald-500 mr-2" />
+                  <span>Subheader</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("subheader")}
+                  </span>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onSetElementType("shot")}>
                   <Camera className="h-3.5 w-3.5 text-cyan-500 mr-2" />
                   <span>Shot</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">⌥7</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("shot")}
+                  </span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
 
-          {/* Desktop Full Segmented Element Selector */}
-          <div className="hidden lg:flex flex-wrap items-center gap-1">
-            <span className="text-[11px] font-bold tracking-wider uppercase text-muted-foreground mr-1.5 hidden xl:inline">
+          {/* Desktop Filmmaker-First Element Selector */}
+          <div className="hidden lg:flex items-center gap-1.5">
+            <span className="text-[11px] font-bold tracking-wider uppercase text-muted-foreground mr-1 hidden xl:inline">
               Format:
             </span>
 
-            {/* Scene Heading */}
-            <Button
-              type="button"
-              variant={activeType === "scene-heading" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("scene-heading")}
-              title="Scene Heading (Mod+Alt+1)"
-            >
-              <Heading className="h-3.5 w-3.5" />
-              <span>Scene Heading</span>
-            </Button>
+            {/* Primary Elements Group */}
+            <div className="flex items-center gap-1">
+              {/* Scene Heading */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "scene-heading" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("scene-heading")}
+                    />
+                  }
+                >
+                  <Heading className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Scene Heading</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Scene Heading</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("scene-heading")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("scene-heading")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
 
-            {/* Action */}
-            <Button
-              type="button"
-              variant={activeType === "action" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("action")}
-              title="Action (Mod+Alt+2)"
-            >
-              <AlignLeft className="h-3.5 w-3.5" />
-              <span>Action</span>
-            </Button>
+              {/* Action */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "action" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("action")}
+                    />
+                  }
+                >
+                  <AlignLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Action</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Action</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("action")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("action")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
 
-            {/* Character */}
-            <Button
-              type="button"
-              variant={activeType === "character" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("character")}
-              title="Character (Mod+Alt+3 / Tab from Action)"
-            >
-              <User className="h-3.5 w-3.5" />
-              <span>Character</span>
-            </Button>
+              {/* Character */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "character" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("character")}
+                    />
+                  }
+                >
+                  <User className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Character</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Character</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("character")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("character")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
 
-            {/* Dialogue */}
-            <Button
-              type="button"
-              variant={activeType === "dialogue" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("dialogue")}
-              title="Dialogue (Mod+Alt+4 / Enter from Character)"
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-              <span>Dialogue</span>
-            </Button>
+              {/* Dialogue */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "dialogue" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("dialogue")}
+                    />
+                  }
+                >
+                  <MessageSquare className="h-3.5 w-3.5 text-purple-500" />
+                  <span>Dialogue</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Dialogue</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("dialogue")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("dialogue")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </div>
 
-            {/* Parenthetical */}
-            <Button
-              type="button"
-              variant={activeType === "parenthetical" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("parenthetical")}
-              title="Parenthetical (Mod+Alt+5 / Tab from Dialogue)"
-            >
-              <span className="font-mono text-xs">( )</span>
-              <span>Parenthetical</span>
-            </Button>
+            <Separator orientation="vertical" className="h-4 mx-0.5" />
 
-            {/* Transition */}
-            <Button
-              type="button"
-              variant={activeType === "transition" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("transition")}
-              title="Transition (Mod+Alt+6)"
-            >
-              <ArrowRight className="h-3.5 w-3.5" />
-              <span>Transition</span>
-            </Button>
+            {/* Secondary Elements Group */}
+            <div className="flex items-center gap-1">
+              {/* Parenthetical */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "parenthetical" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("parenthetical")}
+                    />
+                  }
+                >
+                  <span className="font-mono text-xs">( )</span>
+                  <span className="hidden xl:inline">Parenthetical</span>
+                  <span className="xl:hidden">Paren</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Parenthetical</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("parenthetical")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("parenthetical")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
 
-            {/* Shot */}
-            <Button
-              type="button"
-              variant={activeType === "shot" ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs px-2.5 gap-1.5"
-              onClick={() => onSetElementType("shot")}
-              title="Shot (Mod+Alt+7)"
-            >
-              <Camera className="h-3.5 w-3.5" />
-              <span>Shot</span>
-            </Button>
+              {/* Extension */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "extension" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("extension")}
+                    />
+                  }
+                >
+                  <Volume2 className="h-3.5 w-3.5 text-indigo-500" />
+                  <span className="hidden xl:inline">Extension</span>
+                  <span className="xl:hidden">Ext</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Extension (V.O., O.S.)</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("extension")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("extension")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Transition */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant={activeType === "transition" ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5"
+                      onClick={() => onSetElementType("transition")}
+                    />
+                  }
+                >
+                  <ArrowRight className="h-3.5 w-3.5 text-rose-500" />
+                  <span>Transition</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">Transition</span>
+                      <kbd className="font-mono text-[10px] bg-background/20 px-1 py-0.5 rounded">
+                        {getShortcutDisplay("transition")}
+                      </kbd>
+                    </div>
+                    <span className="text-[10px] text-background/80">
+                      {getDef("transition")?.description}
+                    </span>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+
+            <Separator orientation="vertical" className="h-4 mx-0.5" />
+
+            {/* Tertiary Elements (More Menu) */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant={isTertiaryActive ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs px-2.5 gap-1"
+                  />
+                }
+              >
+                {activeType === "subheader" ? (
+                  <>
+                    <Milestone className="h-3.5 w-3.5 text-emerald-500" />
+                    <span>Subheader</span>
+                  </>
+                ) : activeType === "shot" ? (
+                  <>
+                    <Camera className="h-3.5 w-3.5 text-cyan-500" />
+                    <span>Shot</span>
+                  </>
+                ) : (
+                  <span>More</span>
+                )}
+                <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-44">
+                <DropdownMenuItem onClick={() => onSetElementType("subheader")}>
+                  <Milestone className="h-3.5 w-3.5 text-emerald-500 mr-2" />
+                  <span>Subheader</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("subheader")}
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onSetElementType("shot")}>
+                  <Camera className="h-3.5 w-3.5 text-cyan-500 mr-2" />
+                  <span>Shot</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+                    {getShortcutDisplay("shot")}
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

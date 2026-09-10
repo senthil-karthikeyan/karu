@@ -20,7 +20,8 @@ import {
   ShieldCheck,
   Loader2,
 } from "lucide-react";
-import type { Project, SceneItem } from "@/types/screenplay";
+import { useHotkeys, type RegisterableHotkey } from "@tanstack/react-hotkeys";
+import type { Project, ScreenplayElementType, SceneItem } from "@/types/screenplay";
 import { screenplaysApi, type ScreenplayDetailResponse } from "@/lib/api/screenplays";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import {
@@ -33,6 +34,11 @@ import { EncryptionBadge } from "@/components/crypto/encryption-badge";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
 import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
 import { ShareScreenplayModal } from "@/components/crypto/share-screenplay-modal";
+import { useShortcutsStore } from "@/stores/screenplay-shortcuts-store";
+import {
+  extractScenesFromDoc,
+  sceneBlocksToSceneItems,
+} from "@/lib/screenplay/screenplay-context";
 
 import { ScreenplayToolbar } from "./screenplay-toolbar";
 import { SceneNavigator } from "./scene-navigator";
@@ -49,7 +55,6 @@ import {
   normalizeScreenplayDoc,
   getActiveScreenplayType,
 } from "./screenplay-extensions";
-import type { ScreenplayElementType } from "@/types/screenplay";
 import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/date";
 import { toast } from "sonner";
@@ -58,43 +63,9 @@ interface ScreenplayEditorProps {
   project: Project;
 }
 
-function extractScenesFromHtml(html: string, fallbackScenes: SceneItem[]): SceneItem[] {
-  const headingMatches = [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/gi)];
-  if (headingMatches.length === 0) {
-    return fallbackScenes.length > 0
-      ? fallbackScenes
-      : [
-          {
-            id: "sc-1",
-            number: 1,
-            slugline: "INT. OPENING SCENE - DAY",
-            location: "OPENING SCENE",
-            time: "DAY",
-            pageNumber: 1,
-          },
-        ];
-  }
-
-  return headingMatches.map((m, idx) => {
-    const rawText = m[1].replace(/<[^>]+>/g, "").trim();
-    const cleanSlugline = rawText.replace(/^\d+\.\s*/, "").trim();
-    const timeMatch = cleanSlugline.match(/(DAY|NIGHT|DAWN|DUSK|CONTINUOUS)/i);
-    const time = (timeMatch ? timeMatch[0].toUpperCase() : "DAY") as SceneItem["time"];
-
-    const existing = fallbackScenes[idx];
-    return {
-      id: existing?.id || `sc-dyn-${idx + 1}`,
-      number: idx + 1,
-      slugline: cleanSlugline || `SCENE ${idx + 1}`,
-      location:
-        cleanSlugline.split("-")[0]?.replace(/^(INT\.|EXT\.|INT\/EXT\.)\s*/i, "").trim() ||
-        "LOCATION",
-      time,
-      summary: existing?.summary,
-      pageNumber: existing?.pageNumber || Math.max(1, Math.ceil((idx * 3) + 1)),
-    };
-  });
-}
+// ─── Scene Extraction (AST-based) ─────────────────────────────────────────────
+// The extractScenesFromDoc + sceneBlocksToSceneItems utilities in
+// screenplay-context.ts provide reliable, HTML-free scene extraction.
 
 export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
   const status = useEncryptionStore((state) => state.status);
@@ -131,11 +102,11 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
   const [stats, setStats] = useState({ pageCount: 1, wordCount: 0, sceneCount: 1 });
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Tracks whether the document has unsaved changes (docChanged from ProseMirror)
+  const isDirtyRef = useRef(false);
 
-  // Dynamic scenes computed from screenplay content
-  const dynamicScenes = useMemo(() => {
-    return extractScenesFromHtml(currentHtml, project.scenes || []);
-  }, [currentHtml, project.scenes]);
+  // Shortcut registry — single source of truth for element-selection shortcuts
+  const { definitions, getEffectiveHotkey } = useShortcutsStore();
 
   const initialContent = useMemo(() => {
     return `<p data-type="action"></p>`;
@@ -189,8 +160,9 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       ScreenplayShortcuts,
       ScreenplayPagination.configure({
         projectTitle: project.title,
-        pageUsableHeight: 840,
-        onPageCountChange: (pageCount) => {
+        // Usable height: 1056px page - 96px top margin - 96px bottom margin = 864px
+        pageUsableHeight: 864,
+        onPageCountChange: (pageCount: number) => {
           setStats((prev) => ({ ...prev, pageCount }));
         },
       }),
@@ -201,41 +173,37 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     content: initialContent,
     editorProps: {
       attributes: {
-        class:
-          "focus:outline-none w-full max-w-[820px] mx-auto text-[15px] leading-relaxed font-screenplay",
+        // No width/max-width here — layout is controlled by .screenplay-page padding
+        class: "focus:outline-none font-screenplay",
       },
     },
-    onUpdate: ({ editor: currentEditor }) => {
-      // If not fully ready with unlocked crypto session and key, do not trigger autosave
-      if (!isReadyToEdit || !screenplayKey) {
-        return;
-      }
+    onTransaction: ({ transaction }) => {
+      // ─── SAVE BUG FIX ───────────────────────────────────────────────────────
+      // TipTap fires onTransaction for EVERY ProseMirror transaction, including
+      // pure selection changes (cursor moves, hover states, toolbar interactions).
+      // Only mark dirty and schedule save when the DOCUMENT actually changed.
+      // This prevents:
+      //   - toolbar tab clicks from triggering save
+      //   - cursor moves from triggering save
+      //   - clicking same element type twice from triggering save
+      // ────────────────────────────────────────────────────────────────────────
+      if (!transaction.docChanged) return;
+      if (!isReadyToEdit || !screenplayKey) return;
 
-      const html = currentEditor.getHTML();
-      setCurrentHtml(html);
+      // Mark the document as dirty — actual save happens in the debounced timeout
+      isDirtyRef.current = true;
 
-      // Compute statistics locally from TipTap AST and text
-      const text = currentEditor.getText();
-      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-      let sceneCount = 0;
-      currentEditor.state.doc.descendants((node) => {
-        if (
-          node.type.name === "sceneHeading" ||
-          (node.type.name === "heading" && node.attrs?.dataType === "scene-heading")
-        ) {
-          sceneCount++;
-        }
-      });
-      const currentPageCount = stats.pageCount || 1;
-      setStats((prev) => ({ ...prev, wordCount: words, sceneCount: sceneCount || 1 }));
-
-      // Debounce autosave to dedicated screenplay content endpoints
+      // We need the live editor ref for HTML/JSON, so use a closure via the editor object
+      // (editor is captured in closure; safe because we check isReadyToEdit above)
       setSaveStatus("saving");
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
 
       saveTimeoutRef.current = setTimeout(async () => {
+        if (!isDirtyRef.current) return; // another guard in case state changed
+        isDirtyRef.current = false;
+
         try {
           const targetId = screenplay?.id || activeScreenplayId;
           let nextRevision = currentRevision;
@@ -245,7 +213,19 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             return;
           }
 
-          const json = currentEditor.getJSON() as TipTapDocumentJSON;
+          // Use editor.getJSON() — editor is stable ref in useEditor closure
+          const json = editor?.getJSON() as TipTapDocumentJSON;
+          const text = editor?.getText() ?? "";
+          const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+
+          let sceneCount = 0;
+          editor?.state.doc.descendants((node) => {
+            if (node.type.name === "sceneHeading") sceneCount++;
+          });
+
+          setCurrentHtml(editor?.getHTML() ?? "");
+          setStats((prev) => ({ ...prev, wordCount: words, sceneCount: sceneCount || 1 }));
+
           const res = await screenplaysApi.saveEncryptedContent(
             targetId,
             json,
@@ -253,7 +233,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
             currentRevision,
             {
               wordCount: words,
-              pageCount: currentPageCount,
+              pageCount: stats.pageCount,
               sceneCount: sceneCount || 1,
             }
           );
@@ -291,6 +271,26 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     if (!editor) return "action";
     return getActiveScreenplayType(editor);
   }, [editor]);
+
+  // Dynamic scenes derived from document AST (not HTML)
+  const dynamicScenes = useMemo(() => {
+    if (!editor) return project.scenes ?? [];
+    const blocks = extractScenesFromDoc(editor.state.doc);
+    const items = sceneBlocksToSceneItems(blocks);
+    return items.length > 0
+      ? items
+      : (project.scenes ?? [
+          {
+            id: "sc-1",
+            number: 1,
+            slugline: "INT. OPENING SCENE - DAY",
+            location: "OPENING SCENE",
+            time: "DAY" as const,
+            pageNumber: 1,
+          },
+        ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentHtml, editor, project.scenes]);
 
   // Attempt to load metadata and prompt on mount
   useEffect(() => {
@@ -433,7 +433,9 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         character: "character",
         dialogue: "dialogue",
         parenthetical: "parenthetical",
+        extension: "extension",
         transition: "transition",
+        subheader: "subheader",
         shot: "shot",
       };
 
@@ -443,6 +445,21 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
     [editor]
   );
 
+  // Register element-type selection shortcuts via TanStack Hotkeys.
+  // These are driven by the shortcut registry so they update when the user
+  // customizes them in Settings → Shortcuts. Only active when editor is ready.
+  useHotkeys(
+    definitions.map((def) => ({
+      hotkey: getEffectiveHotkey(def.id) as RegisterableHotkey,
+      callback: (e: KeyboardEvent) => {
+        e.preventDefault();
+        handleSetElementType(def.id as ScreenplayElementType);
+      },
+      options: { enabled: isReadyToEdit },
+    })),
+    { preventDefault: true }
+  );
+
   // Jump to scene in editor via accurate ProseMirror document AST search
   const handleSelectScene = (scene: SceneItem) => {
     setActiveSceneId(scene.id);
@@ -450,7 +467,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
 
     const targetSlugline = scene.slugline.trim().toUpperCase();
     let targetPos: number | null = null;
-    let targetLength = targetSlugline.length;
 
     editor.state.doc.descendants((node, pos) => {
       if (targetPos !== null) return false;
@@ -463,7 +479,6 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           targetSlugline.includes(nodeText)
         ) {
           targetPos = pos + 1;
-          targetLength = node.textContent?.length || targetLength;
           return false;
         }
       }
@@ -473,12 +488,13 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
       editor
         .chain()
         .focus()
-        .setTextSelection({ from: targetPos, to: targetPos + targetLength })
+        .setTextSelection(targetPos)
         .scrollIntoView()
         .run();
     }
   };
 
+  // Page height (1056px) × pageCount + gap between pages (44px) × (pageCount - 1)
   const calculatedMinHeight =
     Math.max(1, stats.pageCount) * 1056 + (Math.max(1, stats.pageCount) - 1) * 44;
 
@@ -705,7 +721,7 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
         />
       </div>
 
-      {/* Main Workspace: Navigator + Virtual Page Canvas */}
+      {/* Main Workspace: Navigator + Physical Page Canvas */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left Scene Navigator (Collapses in Zen Mode) */}
         {navigatorOpen && !zenMode && (
@@ -716,15 +732,17 @@ export function ScreenplayEditor({ project }: ScreenplayEditorProps) {
           />
         )}
 
-        {/* Center Page Canvas Area */}
-        <main className="flex-1 overflow-y-auto flex justify-center py-8 px-4 sm:px-6 md:px-8 bg-muted/40 transition-all relative">
+        {/* Center Page Canvas Area — workspace is the scrollable muted background;
+            screenplay-page is the fixed 8.5×11 white document (816px × 1056px+) */}
+        <main className="screenplay-workspace flex-1 overflow-y-auto flex justify-center py-10 px-6 transition-all relative">
           <div
-            className="w-full max-w-[850px] bg-background shadow-lg border border-border/80 rounded-sm min-h-[1056px] relative p-12 sm:p-16 mb-16"
+            className="screenplay-page screenplay-paper shadow-lg"
             style={{
               minHeight: `${calculatedMinHeight}px`,
+              marginBottom: "40px",
             }}
           >
-            <EditorContent editor={editor} />
+            <EditorContent editor={editor} className="screenplay-editor" />
             <ScreenplayAutocompletePopover editor={editor} />
 
             {/* Strict Encryption Blocker Overlay */}

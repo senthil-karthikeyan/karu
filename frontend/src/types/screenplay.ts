@@ -35,7 +35,9 @@ export type ScreenplayElementType =
   | "character"
   | "dialogue"
   | "parenthetical"
+  | "extension"
   | "transition"
+  | "subheader"
   | "shot";
 
 export interface ActivityItem {

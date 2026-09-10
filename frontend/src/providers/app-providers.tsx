@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "./query-provider";
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -12,10 +13,12 @@ interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps) {
   return (
     <QueryProvider>
-      <TooltipProvider>
-        {children}
-        <Toaster richColors position="top-right" />
-      </TooltipProvider>
+      <HotkeysProvider>
+        <TooltipProvider>
+          {children}
+          <Toaster richColors position="top-right" />
+        </TooltipProvider>
+      </HotkeysProvider>
     </QueryProvider>
   );
 }
