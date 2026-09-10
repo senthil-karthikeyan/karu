@@ -7,6 +7,8 @@ import { Film, Sparkles, Image as ImageIcon } from "lucide-react";
 import { useCreateProjectMutation } from "@/hooks/use-projects";
 import { useEncryptionStore } from "@/stores/encryption-store";
 import { screenplaysApi } from "@/lib/api/screenplays";
+import { EncryptionOnboardingModal } from "@/components/crypto/encryption-onboarding-modal";
+import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
 import type { Genre, ProjectFormat } from "@/types/screenplay";
 import {
   Dialog,
@@ -95,8 +97,31 @@ export function CreateProjectModal({
   const [synopsis, setSynopsis] = useState("");
   const [selectedPoster, setSelectedPoster] = useState(POSTER_PRESETS[0].url);
 
+  const status = useEncryptionStore((state) => state.status);
+  const activeUEK = useEncryptionStore((state) => state.activeUEK);
+  const isUnlocked = status === "UNLOCKED" && !!activeUEK;
+
+  const [setupModalOpen, setSetupModalOpen] = useState(false);
+  const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!isUnlocked) {
+      if (status === "NOT_CONFIGURED") {
+        toast.error("Encryption Setup Required", {
+          description: "You must configure zero-knowledge encryption before creating a project.",
+        });
+        setSetupModalOpen(true);
+      } else {
+        toast.error("Studio Locked", {
+          description: "Please unlock your encryption session before creating a project.",
+        });
+        setUnlockModalOpen(true);
+      }
+      return;
+    }
+
     if (!title.trim()) {
       toast.error("Please enter a project title");
       return;
@@ -117,21 +142,19 @@ export function CreateProjectModal({
         coverImage: selectedPoster,
       });
 
-      // Initialize Default Screenplay Key (SCK) if user encryption session is active
-      const { isUnlocked, createAndWrapScreenplayKey } = useEncryptionStore.getState();
-      if (isUnlocked) {
-        try {
-          const defaultSp = await screenplaysApi.getDefaultScreenplay(newProject.id);
-          if (defaultSp?.id) {
-            await createAndWrapScreenplayKey(defaultSp.id);
-          }
-        } catch (encErr) {
-          console.warn("Could not wrap default screenplay key upon creation:", encErr);
+      // Initialize Default Screenplay Key (SCK) with verified active UEK
+      const { createAndWrapScreenplayKey } = useEncryptionStore.getState();
+      try {
+        const defaultSp = await screenplaysApi.getDefaultScreenplay(newProject.id);
+        if (defaultSp?.id) {
+          await createAndWrapScreenplayKey(defaultSp.id);
         }
+      } catch (encErr) {
+        console.warn("Could not wrap default screenplay key upon creation:", encErr);
       }
 
       toast.success("Project created successfully!", {
-        description: `"${newProject.title}" workspace is ready.`,
+        description: `"${newProject.title}" workspace is ready and encrypted.`,
       });
 
       setOpen(false);
@@ -161,7 +184,40 @@ export function CreateProjectModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-2">
+        {!isUnlocked && (
+          <div className="p-3.5 rounded-lg border text-xs flex items-start justify-between gap-3 bg-amber-500/10 border-amber-500/20 text-amber-900 dark:text-amber-200 mt-2">
+            <div className="space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">
+                <span>🔒</span>
+                {status === "NOT_CONFIGURED"
+                  ? "Zero-Knowledge Encryption Required"
+                  : "Encryption Session Locked"}
+              </p>
+              <p className="text-muted-foreground leading-relaxed">
+                {status === "NOT_CONFIGURED"
+                  ? "To protect your intellectual property, you must configure zero-knowledge encryption before creating projects."
+                  : "Please unlock your studio session with your passphrase to enable project creation."}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (status === "NOT_CONFIGURED") {
+                  setSetupModalOpen(true);
+                } else {
+                  setUnlockModalOpen(true);
+                }
+              }}
+              className="shrink-0 text-xs h-7 gap-1 border-amber-500/30"
+            >
+              {status === "NOT_CONFIGURED" ? "Set Up Now" : "Unlock"}
+            </Button>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 pt-3">
           {/* Title */}
           <div className="space-y-1.5">
             <Label htmlFor="project-title" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -285,12 +341,26 @@ export function CreateProjectModal({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={createProjectMutation.isPending} className="gap-1.5">
+            <Button
+              type="submit"
+              disabled={createProjectMutation.isPending || !isUnlocked}
+              className="gap-1.5"
+            >
               <Sparkles className="h-4 w-4" />
               {createProjectMutation.isPending ? "Creating..." : "Create Project"}
             </Button>
           </DialogFooter>
         </form>
+
+        <EncryptionOnboardingModal
+          open={setupModalOpen}
+          onOpenChange={setSetupModalOpen}
+        />
+        <EncryptionDialog
+          open={unlockModalOpen}
+          onOpenChange={setUnlockModalOpen}
+          mode="unlock"
+        />
       </DialogContent>
     </Dialog>
   );

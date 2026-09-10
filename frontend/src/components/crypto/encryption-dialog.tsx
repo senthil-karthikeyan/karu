@@ -43,6 +43,7 @@ export function EncryptionDialog({
   onSuccess,
 }: EncryptionDialogProps) {
   const { user } = useAuth();
+  const status = useEncryptionStore((state) => state.status);
   const setupNewSecret = useEncryptionStore((state) => state.setupNewSecret);
   const unlockWithSecret = useEncryptionStore((state) => state.unlockWithSecret);
   const resetPassphraseWithRecovery = useEncryptionStore(
@@ -59,6 +60,10 @@ export function EncryptionDialog({
   const [isLoading, setIsLoading] = useState(false);
 
   const activeMetadata = userMetadata || storeMetadata;
+
+  // Safe mode determination: if user has registered keys/locked, NEVER accidentally drop to setup mode
+  const effectiveMode =
+    status === "NOT_CONFIGURED" && !activeMetadata ? "setup" : mode === "setup" && !activeMetadata ? "setup" : "unlock";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,7 +117,7 @@ export function EncryptionDialog({
       return;
     }
 
-    if (mode === "setup") {
+    if (effectiveMode === "setup") {
       if (secret !== confirmSecret) {
         setError("Encryption secrets do not match.");
         return;
@@ -121,27 +126,30 @@ export function EncryptionDialog({
 
     setIsLoading(true);
     try {
-      if (mode === "setup") {
+      if (effectiveMode === "setup") {
         await setupNewSecret(secret);
       } else {
-        if (!activeMetadata) {
-          await setupNewSecret(secret);
-        } else {
-          await unlockWithSecret(secret, activeMetadata);
+        let meta = activeMetadata;
+        if (!meta) {
+          meta = await useEncryptionStore.getState().fetchUserMetadata();
         }
+        if (!meta) {
+          throw new Error("Encryption metadata not found on server.");
+        }
+        await unlockWithSecret(secret, meta);
       }
 
+      toast.success(effectiveMode === "setup" ? "Zero-Knowledge Encryption Activated!" : "Screenplay Unlocked!");
       if (onSuccess) {
         await onSuccess();
       }
 
-      useEncryptionStore.setState({ isUnlocked: true });
       setSecret("");
       setConfirmSecret("");
       onOpenChange(false);
-    } catch {
-      useEncryptionStore.setState({ isUnlocked: false, activeUEK: null });
-      setError("Invalid encryption secret. Please verify your passphrase.");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Incorrect encryption password.";
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +163,7 @@ export function EncryptionDialog({
             <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3 text-primary">
               {isRecovering ? (
                 <LifeBuoy className="w-6 h-6" />
-              ) : mode === "setup" ? (
+              ) : effectiveMode === "setup" ? (
                 <KeyRound className="w-6 h-6" />
               ) : (
                 <Lock className="w-6 h-6" />
@@ -164,14 +172,14 @@ export function EncryptionDialog({
             <DialogTitle className="text-center text-xl">
               {isRecovering
                 ? "Recover Encryption Access"
-                : mode === "setup"
+                : effectiveMode === "setup"
                   ? "Protect Your Screenplay"
                   : "Unlock Screenplay"}
             </DialogTitle>
             <DialogDescription className="text-center text-sm text-muted-foreground pt-1">
               {isRecovering
                 ? "Enter your Emergency Recovery Code to reset your encryption passphrase."
-                : mode === "setup"
+                : effectiveMode === "setup"
                   ? "Create a client-side encryption secret. Your screenplay will be encrypted in your browser using AES-GCM (256-bit)."
                   : "Enter your encryption secret to decrypt and edit this screenplay."}
             </DialogDescription>
@@ -235,7 +243,7 @@ export function EncryptionDialog({
               </>
             ) : (
               <>
-                {mode === "setup" && (
+                {effectiveMode === "setup" && (
                   <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 flex gap-2.5 text-xs text-amber-700 dark:text-amber-300">
                     <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
                     <p className="leading-relaxed">
@@ -251,7 +259,7 @@ export function EncryptionDialog({
                     <Input
                       id="encryption-secret"
                       type={showSecret ? "text" : "password"}
-                      placeholder={mode === "setup" ? "Enter a strong passphrase" : "Enter your secret"}
+                      placeholder={effectiveMode === "setup" ? "Enter a strong passphrase" : "Enter your secret"}
                       value={secret}
                       onChange={(e) => setSecret(e.target.value)}
                       autoFocus
@@ -268,7 +276,7 @@ export function EncryptionDialog({
                   </div>
                 </div>
 
-                {mode === "setup" && (
+                {effectiveMode === "setup" && (
                   <div className="space-y-2">
                     <Label htmlFor="confirm-encryption-secret">Confirm Encryption Secret</Label>
                     <Input
@@ -282,7 +290,7 @@ export function EncryptionDialog({
                   </div>
                 )}
 
-                {mode === "unlock" && (
+                {effectiveMode === "unlock" && (
                   <div className="text-right">
                     <button
                       type="button"
@@ -301,7 +309,10 @@ export function EncryptionDialog({
             )}
 
             {error && (
-              <p className="text-xs text-destructive bg-destructive/10 p-2.5 rounded-md border border-destructive/20">
+              <p
+                id="encryption-dialog-error"
+                className="text-xs text-destructive bg-destructive/10 p-2.5 rounded-md border border-destructive/20 font-medium"
+              >
                 {error}
               </p>
             )}
@@ -337,7 +348,7 @@ export function EncryptionDialog({
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
               {isRecovering
                 ? "Reset & Unlock"
-                : mode === "setup"
+                : effectiveMode === "setup"
                   ? "Enable Encryption"
                   : "Unlock"}
             </Button>

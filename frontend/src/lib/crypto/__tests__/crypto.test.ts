@@ -42,6 +42,9 @@ import {
   wrapPrivateKeyWithRecoveryKey,
   unwrapPrivateKeyWithRecoveryKey,
   validateRecoveryKeyFormat,
+  isEmptyEncryptedPayload,
+  isEncryptedPayload,
+  createEmptyScreenplayDoc,
 } from "../index";
 
 export interface TestResult {
@@ -792,6 +795,90 @@ export async function runCryptoTestSuite(): Promise<TestResult[]> {
 
     if (!recoveryRejected) {
       throw new Error("Private key unwrap must fail when using wrong recovery code!");
+    }
+  });
+
+  // 23. Empty Payload: Detect uninitialized encrypted payloads and prevent editor leakage
+  await test("Empty Payload: Detect uninitialized encrypted payloads and prevent editor leakage", async () => {
+    // Standard backend uninitialized payload
+    const backendEmpty = {
+      version: 1,
+      algorithm: "AES-GCM",
+      iv: "",
+      ciphertext: "",
+    };
+    if (!isEmptyEncryptedPayload(backendEmpty)) {
+      throw new Error("Backend uninitialized object payload must be identified as empty!");
+    }
+
+    // Stringified backend uninitialized payload
+    const backendEmptyStr = JSON.stringify(backendEmpty);
+    if (!isEmptyEncryptedPayload(backendEmptyStr)) {
+      throw new Error("Backend uninitialized string payload must be identified as empty!");
+    }
+
+    // Uppercase variant
+    const uppercaseEmpty = {
+      VERSION: 1,
+      ALGORITHM: "AES-GCM",
+      IV: "",
+      CIPHERTEXT: "",
+    };
+    if (!isEmptyEncryptedPayload(uppercaseEmpty)) {
+      throw new Error("Uppercase empty encrypted payload must be identified as empty!");
+    }
+    if (!isEmptyEncryptedPayload(JSON.stringify(uppercaseEmpty))) {
+      throw new Error("Uppercase empty stringified payload must be identified as empty!");
+    }
+
+    // Empty string / null / undefined / empty HTML paragraph
+    if (!isEmptyEncryptedPayload("")) throw new Error("Empty string must be identified as empty!");
+    if (!isEmptyEncryptedPayload(null)) throw new Error("Null must be identified as empty!");
+    if (!isEmptyEncryptedPayload(undefined)) throw new Error("Undefined must be identified as empty!");
+    if (!isEmptyEncryptedPayload("<p></p>")) throw new Error("<p></p> must be identified as empty!");
+    if (!isEmptyEncryptedPayload('<p data-type="action"></p>')) throw new Error("Empty action tag must be identified as empty!");
+
+    // Empty doc creation
+    const emptyDoc = createEmptyScreenplayDoc();
+    if (!isEmptyEncryptedPayload(emptyDoc)) {
+      throw new Error("createEmptyScreenplayDoc() must be identified as empty!");
+    }
+    if (emptyDoc.type !== "doc" || !emptyDoc.content || emptyDoc.content.length !== 1 || emptyDoc.content[0]?.type !== "action") {
+      throw new Error("createEmptyScreenplayDoc() does not match required empty TipTap structure!");
+    }
+  });
+
+  // 24. Empty Payload: Valid encrypted payloads and actual screenplay content are NOT empty
+  await test("Empty Payload: Valid encrypted payloads and actual screenplay content are NOT empty", async () => {
+    const sck = await generateScreenplayContentKey();
+    const doc: TipTapDocumentJSON = {
+      type: "doc",
+      content: [
+        {
+          type: "action",
+          attrs: { dataType: "action" },
+          content: [{ type: "text", text: "FADE IN:" }],
+        },
+      ],
+    };
+    const encrypted = await encryptScreenplayContent(doc, sck);
+
+    if (isEmptyEncryptedPayload(encrypted)) {
+      throw new Error("Valid encrypted payload must NOT be identified as empty!");
+    }
+    if (isEmptyEncryptedPayload(JSON.stringify(encrypted))) {
+      throw new Error("Valid encrypted string must NOT be identified as empty!");
+    }
+    if (!isEncryptedPayload(encrypted)) {
+      throw new Error("Valid encrypted payload must satisfy isEncryptedPayload!");
+    }
+
+    // Real screenplay text/HTML
+    if (isEmptyEncryptedPayload('<h2 data-type="scene-heading">INT. OFFICE - DAY</h2>')) {
+      throw new Error("Actual screenplay HTML must NOT be identified as empty!");
+    }
+    if (isEmptyEncryptedPayload(doc)) {
+      throw new Error("Non-empty TipTap doc must NOT be identified as empty!");
     }
   });
 

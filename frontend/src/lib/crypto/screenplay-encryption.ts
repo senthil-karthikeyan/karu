@@ -17,21 +17,128 @@ import {
 import { encryptAESGCM, decryptAESGCM } from "./aes-gcm";
 
 /**
+ * Creates an empty canonical TipTap document JSON object with an empty action paragraph.
+ */
+export function createEmptyScreenplayDoc(): TipTapDocumentJSON {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "action",
+        attrs: { dataType: "action" },
+        content: [],
+      },
+    ],
+  };
+}
+
+/**
  * Type guard to check if an unknown object matches the EncryptedPayload schema.
+ * Requires both valid IV and ciphertext to be non-empty strings.
  */
 export function isEncryptedPayload(value: unknown): value is EncryptedPayload {
   if (!value || typeof value !== "object") {
     return false;
   }
   const candidate = value as Record<string, unknown>;
+  const version = candidate.version ?? candidate.VERSION;
+  const algorithm = candidate.algorithm ?? candidate.ALGORITHM;
+  const iv = candidate.iv ?? candidate.IV;
+  const ciphertext = candidate.ciphertext ?? candidate.CIPHERTEXT;
+
   return (
-    candidate.version === CURRENT_ENCRYPTION_VERSION &&
-    candidate.algorithm === CURRENT_ALGORITHM &&
-    typeof candidate.iv === "string" &&
-    candidate.iv.length > 0 &&
-    typeof candidate.ciphertext === "string" &&
-    candidate.ciphertext.length > 0
+    (version === CURRENT_ENCRYPTION_VERSION || version === 1) &&
+    (algorithm === CURRENT_ALGORITHM || algorithm === "AES-GCM") &&
+    typeof iv === "string" &&
+    iv.trim().length > 0 &&
+    typeof ciphertext === "string" &&
+    ciphertext.trim().length > 0
   );
+}
+
+/**
+ * Checks if a value represents an empty, uninitialized, or wrapper-only encrypted screenplay payload.
+ *
+ * This includes:
+ * 1. null, undefined, or empty/whitespace string
+ * 2. Empty HTML paragraphs like "<p></p>" or '<p data-type="action"></p>'
+ * 3. An EncryptedPayload object or serialized JSON where iv and/or ciphertext are empty strings
+ *    (e.g., {"version":1,"algorithm":"AES-GCM","iv":"","ciphertext":""} or uppercase variants)
+ * 4. An empty TipTap document JSON AST
+ */
+export function isEmptyEncryptedPayload(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return true;
+  }
+
+  // 1. String checks
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (
+      !trimmed ||
+      trimmed === "<p></p>" ||
+      trimmed === '<p data-type="action"></p>' ||
+      trimmed === '<p data-type="action"><br></p>'
+    ) {
+      return true;
+    }
+
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return isEmptyEncryptedPayload(parsed);
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // 2. Object checks
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+
+    // Check if it matches an encrypted wrapper structure
+    const version = obj.version ?? obj.VERSION;
+    const algorithm = obj.algorithm ?? obj.ALGORITHM;
+    const iv = obj.iv ?? obj.IV;
+    const ciphertext = obj.ciphertext ?? obj.CIPHERTEXT;
+
+    const hasCryptoMarker =
+      (version === CURRENT_ENCRYPTION_VERSION || version === 1 || version === "1") ||
+      (typeof algorithm === "string" && (algorithm === CURRENT_ALGORITHM || algorithm === "AES-GCM"));
+
+    if (hasCryptoMarker) {
+      const ivEmpty = typeof iv !== "string" || iv.trim().length === 0;
+      const ctEmpty = typeof ciphertext !== "string" || ciphertext.trim().length === 0;
+      // If either IV or ciphertext is empty, this is an uninitialized/empty encrypted payload!
+      return ivEmpty || ctEmpty;
+    }
+
+    // Check if it's an empty TipTap document JSON
+    if (obj.type === "doc" && Array.isArray(obj.content)) {
+      if (obj.content.length === 0) return true;
+      if (
+        obj.content.length === 1 &&
+        obj.content[0] &&
+        typeof obj.content[0] === "object"
+      ) {
+        const firstNode = obj.content[0] as Record<string, unknown>;
+        if (!firstNode.content || (Array.isArray(firstNode.content) && firstNode.content.length === 0)) {
+          return true;
+        }
+        if (
+          Array.isArray(firstNode.content) &&
+          firstNode.content.length === 1 &&
+          (firstNode.content[0] as Record<string, unknown>)?.text === ""
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import type { SceneItem } from "./scenes";
+import type { ScreenplayDetailResponse } from "./screenplays";
 
 export interface ProjectResponse {
   id: string;
@@ -56,8 +57,8 @@ export const projectsApi = {
     return apiClient<ProjectDetailResponse>(`/projects/${id}`);
   },
 
-  async getDefaultScreenplay(id: string): Promise<any> {
-    return apiClient(`/projects/${id}/screenplay`);
+  async getDefaultScreenplay(id: string): Promise<ScreenplayDetailResponse> {
+    return apiClient<ScreenplayDetailResponse>(`/projects/${id}/screenplay`);
   },
 
   async updateProject(id: string, data: UpdateProjectRequest): Promise<ProjectResponse> {

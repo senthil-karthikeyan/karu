@@ -31,6 +31,7 @@ import {
   parseEncryptedPayloadString,
   decryptScreenplayContent,
   tipTapJsonToHtml,
+  isEmptyEncryptedPayload,
 } from "@/lib/crypto";
 import { screenplaysApi } from "@/lib/api/screenplays";
 import { EncryptionDialog } from "@/components/crypto/encryption-dialog";
@@ -67,6 +68,15 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
         if (!isMounted) return;
         const cnt = await screenplaysApi.getContent(sp.id);
         if (!isMounted) return;
+        if (isEmptyEncryptedPayload(cnt.content)) {
+          setScreenplayState({
+            id: sp.id,
+            isEncrypted: false,
+            rawContent: "",
+            payload: null,
+          });
+          return;
+        }
         const raw = typeof cnt.content === "string" ? cnt.content : JSON.stringify(cnt.content);
         const parsed = parseEncryptedPayloadString(raw);
         setScreenplayState({
@@ -117,6 +127,9 @@ export function ScreenplayPreviewView({ project }: ScreenplayPreviewViewProps) {
   const effectiveHtml = useMemo(() => {
     if (isEncrypted) {
       return decryptedHtml || "";
+    }
+    if (isEmptyEncryptedPayload(screenplayState?.rawContent)) {
+      return "";
     }
     return screenplayState?.rawContent || "";
   }, [isEncrypted, decryptedHtml, screenplayState?.rawContent]);

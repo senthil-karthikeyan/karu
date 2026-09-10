@@ -106,9 +106,11 @@ export async function unwrapScreenplayContentKeyWithUEK(
       ["encrypt", "decrypt"]
     );
   } catch (error) {
-    throw new Error(
-      `Failed to unwrap Screenplay Key: ${error instanceof Error ? error.message : "Invalid key or secret"}`
-    );
+    const detail =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "Authentication tag mismatch (invalid passphrase or incompatible key)";
+    throw new Error(`Failed to unwrap Screenplay Key: ${detail}`);
   }
 }
 
@@ -213,9 +215,11 @@ export async function unwrapUserPrivateKeyWithUEK(
       ["deriveKey", "deriveBits"]
     );
   } catch (error) {
-    throw new Error(
-      `Failed to unwrap User Private Key: ${error instanceof Error ? error.message : "Invalid key or passphrase"}`
-    );
+    const detail =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "Authentication tag mismatch (incorrect passphrase)";
+    throw new Error(`Failed to unwrap User Private Key: ${detail}`);
   }
 }
 
